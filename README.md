@@ -4,7 +4,7 @@ Aplicacion web para gestionar dos perfiles operativos interconectados con activi
 
 ## Estado actual
 
-Sprint 7 - UX Comercial, Responsive y Administracion:
+Sprint 8 - QA, Produccion y GitHub Pages:
 
 - App frontend inicial con React + Vite.
 - Sistema visual base con paneles tipo glass, tokens CSS, botones, inputs, badges y estados.
@@ -33,6 +33,13 @@ Sprint 7 - UX Comercial, Responsive y Administracion:
 - Etiquetas simples en temas.
 - Filtros de pendientes y catalogo reutilizable de herramientas.
 - Ajustes de usuario con nombre visible y preferencias basicas.
+- Recuperacion de contrasena con Supabase Auth.
+- Gestion basica de usuarios visibles y auditoria de cambios filtrable.
+- Control minimo de conflictos usando `updated_at` antes de guardar.
+- Notas destacadas y visibles en dashboard/contexto.
+- Duplicado de actividades con datos base y perfiles asociados.
+- Mapa relacional por actividad con perfiles, herramientas, temas, notas y pendientes.
+- Microinteracciones y revision responsive para produccion.
 - Integracion con Supabase Auth y Supabase Realtime.
 - Migraciones SQL con tablas, relaciones, constraints, indices, RLS, roles y triggers de auditoria.
 - Documentacion de configuracion de Supabase, staging y QA de permisos.
@@ -93,6 +100,7 @@ supabase/
     0003_profiles_dashboard_support.sql
     0004_autosave_realtime_history.sql
     0005_commercial_ux_admin.sql
+    0006_production_qa_features.sql
 docs/
   SUPABASE_SETUP.md
   STAGING_DEPLOYMENT.md
@@ -103,4 +111,5 @@ docs/
   SPRINT_5_WORK_CONTEXT.md
   SPRINT_6_AUTOSAVE_REALTIME_HISTORY.md
   SPRINT_7_COMMERCIAL_UX_ADMIN.md
+  SPRINT_8_QA_PRODUCTION.md
 ```

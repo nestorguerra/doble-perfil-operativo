@@ -5,9 +5,11 @@ import {
   CalendarRange,
   CheckCircle2,
   Clock3,
+  Copy,
   Filter,
   GitBranch,
   History,
+  KeyRound,
   Layers3,
   LockKeyhole,
   LogOut,
@@ -18,6 +20,7 @@ import {
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  Star,
   Tag,
   Trash2,
   UserRound,
@@ -84,6 +87,7 @@ const emptyOperationalData = {
   changes: [],
   tools: [],
   topics: [],
+  userProfiles: [],
 };
 
 function useAutosave({ delay = AUTOSAVE_DELAY_MS, enabled, onSave, resetKey, validate, value }) {
@@ -169,6 +173,7 @@ function App() {
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [profiles, setProfiles] = useState(profileSeed);
   const [operationalData, setOperationalData] = useState(emptyOperationalData);
+  const [requiresPasswordReset, setRequiresPasswordReset] = useState(false);
   const [syncState, setSyncState] = useState(
     hasSupabaseConfig ? "Comprobando sesion segura..." : "Falta conectar Supabase",
   );
@@ -193,7 +198,10 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setRequiresPasswordReset(true);
+      }
       setSession(nextSession);
       setAuthStatus(nextSession ? "authenticated" : "unauthenticated");
     });
@@ -228,6 +236,7 @@ function App() {
         topicsResult,
         toolsResult,
         changesResult,
+        userProfilesResult,
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -256,7 +265,7 @@ function App() {
           .limit(50),
         supabase
           .from("notes")
-          .select("id,profile_id,activity_id,content,created_by,updated_by,created_at,updated_at")
+          .select("id,profile_id,activity_id,content,is_pinned,created_by,updated_by,created_at,updated_at")
           .order("created_at", { ascending: false })
           .limit(50),
         supabase
@@ -274,6 +283,11 @@ function App() {
           .select("id,entity_type,entity_id,change_type,changed_by,summary,before_data,after_data,changed_at")
           .order("changed_at", { ascending: false })
           .limit(80),
+        supabase
+          .from("user_profiles")
+          .select("id,display_name,role,created_at,updated_at")
+          .order("updated_at", { ascending: false })
+          .limit(100),
       ]);
 
       if (ignore) return;
@@ -288,6 +302,7 @@ function App() {
         topicsResult,
         toolsResult,
         changesResult,
+        userProfilesResult,
       ].some((result) => result.error);
 
       if (hasError) {
@@ -305,6 +320,7 @@ function App() {
         changes: changesResult.data ?? [],
         tools: toolsResult.data ?? [],
         topics: topicsResult.data ?? [],
+        userProfiles: userProfilesResult.data ?? [],
       });
       setSyncState("Dashboard sincronizado");
     }
@@ -345,6 +361,7 @@ function App() {
     setCurrentUserProfile(null);
     setProfiles(profileSeed);
     setOperationalData(emptyOperationalData);
+    setRequiresPasswordReset(false);
     setAuthStatus("unauthenticated");
     setSyncState("Sesion cerrada");
   }
@@ -353,6 +370,10 @@ function App() {
     if (!supabase) {
       return { error: "Supabase no esta configurado." };
     }
+
+    const currentProfile = profiles.find((profile) => profile.id === profileId);
+    const conflictError = detectConflict(values.expectedUpdatedAt, currentProfile?.updated_at);
+    if (conflictError) return { error: conflictError };
 
     const payload = {
       name: values.name.trim(),
@@ -404,6 +425,12 @@ function App() {
     if (error) return { error: readableDatabaseError(error.message) };
 
     setCurrentUserProfile(data);
+    setOperationalData((current) => ({
+      ...current,
+      userProfiles: current.userProfiles.map((profile) =>
+        profile.id === session.user.id ? { ...profile, ...data } : profile,
+      ),
+    }));
     return { data };
   }
 
@@ -449,6 +476,22 @@ function App() {
     return { data: hydratedActivity };
   }
 
+  async function handleDuplicateActivity(activityId) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const sourceActivity = operationalData.activities.find((activity) => activity.id === activityId);
+    if (!sourceActivity) return { error: "No encuentro la actividad original." };
+
+    return handleCreateActivity({
+      description: sourceActivity.description || "",
+      profileIds: getActivityProfileIds(sourceActivity),
+      status: sourceActivity.status === "completed" ? "pending" : sourceActivity.status,
+      title: `${sourceActivity.title} copia`,
+    });
+  }
+
   async function handleUpdateActivity(activityId, values) {
     if (!supabase) {
       return { error: "Supabase no esta configurado." };
@@ -456,6 +499,10 @@ function App() {
 
     const validationError = validateActivityForm(values);
     if (validationError) return { error: validationError };
+
+    const currentActivity = operationalData.activities.find((activity) => activity.id === activityId);
+    const conflictError = detectConflict(values.expectedUpdatedAt, currentActivity?.updated_at);
+    if (conflictError) return { error: conflictError };
 
     const normalized = normalizeActivityForm(values);
     const { data: updatedActivity, error: activityError } = await supabase
@@ -554,6 +601,10 @@ function App() {
     const validationError = validateScheduleForm(values);
     if (validationError) return { error: validationError };
 
+    const currentEntry = operationalData.scheduleEntries.find((entry) => entry.id === entryId);
+    const conflictError = detectConflict(values.expectedUpdatedAt, currentEntry?.updated_at);
+    if (conflictError) return { error: conflictError };
+
     const payload = normalizeScheduleForm(values);
     const { data, error } = await supabase
       .from("schedule_entries")
@@ -623,6 +674,10 @@ function App() {
     const validationError = validateWorkItemForm(kind, values);
     if (validationError) return { error: validationError };
 
+    const currentItem = operationalData[workItemStateKey(kind)].find((item) => item.id === itemId);
+    const conflictError = detectConflict(values.expectedUpdatedAt, currentItem?.updated_at);
+    if (conflictError) return { error: conflictError };
+
     const table = workItemTable(kind);
     const payload = normalizeWorkItemForm(kind, values);
     const { data, error } = await supabase
@@ -672,6 +727,20 @@ function App() {
       profileId: task.profile_id || "",
       status: nextStatus,
       title: task.title,
+      expectedUpdatedAt: task.updated_at,
+    });
+  }
+
+  async function handleTogglePinnedNote(noteId) {
+    const note = operationalData.notes.find((item) => item.id === noteId);
+    if (!note) return { error: "No encuentro la nota." };
+
+    return handleUpdateWorkItem("note", noteId, {
+      activityId: note.activity_id || "",
+      content: note.content,
+      expectedUpdatedAt: note.updated_at,
+      isPinned: !note.is_pinned,
+      profileId: note.profile_id || "",
     });
   }
 
@@ -683,6 +752,10 @@ function App() {
     return <AuthScreen syncState={syncState} />;
   }
 
+  if (requiresPasswordReset) {
+    return <PasswordResetScreen onComplete={() => setRequiresPasswordReset(false)} />;
+  }
+
   return (
     <PrivateDashboard
       currentUserProfile={currentUserProfile}
@@ -691,7 +764,9 @@ function App() {
       onCreateScheduleEntry={handleCreateScheduleEntry}
       onDeleteScheduleEntry={handleDeleteScheduleEntry}
       onDeleteWorkItem={handleDeleteWorkItem}
+      onDuplicateActivity={handleDuplicateActivity}
       onSignOut={handleSignOut}
+      onTogglePinnedNote={handleTogglePinnedNote}
       onToggleTask={handleToggleTask}
       onUpdateActivity={handleUpdateActivity}
       onUpdateCurrentUser={handleUpdateCurrentUser}
@@ -715,6 +790,7 @@ function AuthScreen({ syncState }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isRegisterMode = mode === "register";
+  const isRecoverMode = mode === "recover";
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -725,9 +801,13 @@ function AuthScreen({ syncState }) {
     setError("");
     setStatus("");
 
-    const validationError = isRegisterMode
-      ? validateRegistrationForm(form)
-      : validateLoginForm(form);
+    const validationError = isRecoverMode
+      ? !normalizeEmail(form.email)
+        ? "Introduce el email de la cuenta."
+        : ""
+      : isRegisterMode
+        ? validateRegistrationForm(form)
+        : validateLoginForm(form);
 
     if (validationError) {
       setError(validationError);
@@ -747,25 +827,35 @@ function AuthScreen({ syncState }) {
     setIsSubmitting(true);
 
     const email = normalizeEmail(form.email);
-    const result = isRegisterMode
-      ? await supabase.auth.signUp({
-          email,
-          password: form.password,
-          options: {
-            data: {
-              display_name: form.displayName.trim(),
-            },
-          },
+    const result = isRecoverMode
+      ? await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.href,
         })
-      : await supabase.auth.signInWithPassword({
-          email,
-          password: form.password,
-        });
+      : isRegisterMode
+        ? await supabase.auth.signUp({
+            email,
+            password: form.password,
+            options: {
+              data: {
+                display_name: form.displayName.trim(),
+              },
+            },
+          })
+        : await supabase.auth.signInWithPassword({
+            email,
+            password: form.password,
+          });
 
     setIsSubmitting(false);
 
     if (result.error) {
       setError(readableAuthError(result.error.message));
+      return;
+    }
+
+    if (isRecoverMode) {
+      setStatus("Te hemos enviado el enlace para restablecer la contrasena si el email existe.");
+      setForm(initialAuthForm);
       return;
     }
 
@@ -787,21 +877,21 @@ function AuthScreen({ syncState }) {
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 7</p>
+            <p className="chrome-label">Sprint 8</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
         <div className="auth-copy">
-          <p className="chrome-label">UX comercial y responsive</p>
+          <p className="chrome-label">QA, produccion y GitHub Pages</p>
           <h2>Acceso protegido para una herramienta profesional</h2>
           <p>
-            Busqueda, filtros, vista mensual y administracion se activan solo cuando Supabase
-            confirma una sesion valida.
+            Recuperacion de contrasena, auditoria, duplicado y gestion avanzada se activan solo
+            cuando Supabase confirma una sesion valida.
           </p>
         </div>
         <div className="auth-security-grid">
           <SecurityPoint icon={LockKeyhole} title="Auth real" body="Email y contrasena gestionados por Supabase." />
-          <SecurityPoint icon={Layers3} title="UX comercial" body="Busqueda, filtros, responsive y estados claros." />
+          <SecurityPoint icon={KeyRound} title="Recuperacion" body="Flujo seguro de reset de contrasena por email." />
           <SecurityPoint icon={UserRoundPlus} title="Perfiles" body="Dos perfiles editables e interconectados." />
         </div>
       </section>
@@ -810,7 +900,7 @@ function AuthScreen({ syncState }) {
         <div className="auth-panel-head">
           <div>
             <p className="chrome-label">Acceso</p>
-            <h2>{isRegisterMode ? "Crear usuario" : "Entrar"}</h2>
+            <h2>{isRecoverMode ? "Recuperar acceso" : isRegisterMode ? "Crear usuario" : "Entrar"}</h2>
           </div>
           <span className={hasSupabaseConfig ? "small-badge green" : "small-badge amber"}>
             {hasSupabaseConfig ? "Supabase listo" : "Config pendiente"}
@@ -819,8 +909,8 @@ function AuthScreen({ syncState }) {
 
         <div className="segmented-control" role="tablist" aria-label="Modo de autenticacion">
           <button
-            aria-selected={!isRegisterMode}
-            className={!isRegisterMode ? "is-selected" : ""}
+            aria-selected={mode === "login"}
+            className={mode === "login" ? "is-selected" : ""}
             onClick={() => setMode("login")}
             type="button"
           >
@@ -833,6 +923,14 @@ function AuthScreen({ syncState }) {
             type="button"
           >
             Registro
+          </button>
+          <button
+            aria-selected={isRecoverMode}
+            className={isRecoverMode ? "is-selected" : ""}
+            onClick={() => setMode("recover")}
+            type="button"
+          >
+            Recuperar
           </button>
         </div>
 
@@ -859,16 +957,18 @@ function AuthScreen({ syncState }) {
               value={form.email}
             />
           </label>
-          <label>
-            Contrasena
-            <input
-              autoComplete={isRegisterMode ? "new-password" : "current-password"}
-              onChange={(event) => updateField("password", event.target.value)}
-              placeholder="Minimo 8 caracteres"
-              type="password"
-              value={form.password}
-            />
-          </label>
+          {!isRecoverMode && (
+            <label>
+              Contrasena
+              <input
+                autoComplete={isRegisterMode ? "new-password" : "current-password"}
+                onChange={(event) => updateField("password", event.target.value)}
+                placeholder="Minimo 8 caracteres"
+                type="password"
+                value={form.password}
+              />
+            </label>
+          )}
           {isRegisterMode && (
             <label>
               Confirmar contrasena
@@ -896,7 +996,93 @@ function AuthScreen({ syncState }) {
           )}
 
           <button className="primary-button" disabled={isSubmitting} type="submit">
-            {isSubmitting ? "Procesando..." : isRegisterMode ? "Crear acceso" : "Entrar al dashboard"}
+            {isSubmitting
+              ? "Procesando..."
+              : isRecoverMode
+                ? "Enviar enlace"
+                : isRegisterMode
+                  ? "Crear acceso"
+                  : "Entrar al dashboard"}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function PasswordResetScreen({ onComplete }) {
+  const [form, setForm] = useState({ confirmPassword: "", password: "" });
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setMessage("");
+
+    if (form.password.length < 8) {
+      setMessage("La contrasena debe tener al menos 8 caracteres.");
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      setMessage("Las contrasenas no coinciden.");
+      return;
+    }
+
+    setIsSaving(true);
+    const { error } = await supabase.auth.updateUser({ password: form.password });
+    setIsSaving(false);
+
+    if (error) {
+      setMessage(readableAuthError(error.message));
+      return;
+    }
+
+    setMessage("Contrasena actualizada.");
+    onComplete();
+  }
+
+  return (
+    <main className="auth-shell single">
+      <section className="auth-panel glass-panel">
+        <div className="brand-block">
+          <div className="brand-mark">
+            <KeyRound size={22} />
+          </div>
+          <div>
+            <p className="chrome-label">AUTH-03</p>
+            <h1>Nueva contrasena</h1>
+          </div>
+        </div>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <label>
+            Nueva contrasena
+            <input
+              autoComplete="new-password"
+              onChange={(event) => setFormField(setForm, "password", event.target.value)}
+              placeholder="Minimo 8 caracteres"
+              type="password"
+              value={form.password}
+            />
+          </label>
+          <label>
+            Confirmar contrasena
+            <input
+              autoComplete="new-password"
+              onChange={(event) => setFormField(setForm, "confirmPassword", event.target.value)}
+              placeholder="Repite la contrasena"
+              type="password"
+              value={form.confirmPassword}
+            />
+          </label>
+          {message && (
+            <p className={message.includes("actualizada") ? "form-message is-success" : "form-message is-error"}>
+              {message}
+            </p>
+          )}
+          <button className="primary-button" disabled={isSaving} type="submit">
+            <Save size={16} />
+            {isSaving ? "Guardando..." : "Actualizar contrasena"}
           </button>
         </form>
       </section>
@@ -912,7 +1098,9 @@ function PrivateDashboard({
   onCreateWorkItem,
   onDeleteScheduleEntry,
   onDeleteWorkItem,
+  onDuplicateActivity,
   onSignOut,
+  onTogglePinnedNote,
   onToggleTask,
   onUpdateActivity,
   onUpdateCurrentUser,
@@ -955,7 +1143,7 @@ function PrivateDashboard({
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 7</p>
+            <p className="chrome-label">Sprint 8</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -986,7 +1174,7 @@ function PrivateDashboard({
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="chrome-label">UX comercial, responsive y administracion</p>
+            <p className="chrome-label">QA, produccion y GitHub Pages</p>
             <h2>{viewTitle(activeView, selectedProfile)}</h2>
           </div>
           <div className="topbar-actions user-chip">
@@ -1024,6 +1212,7 @@ function PrivateDashboard({
             model={dashboardModel}
             onCreateWorkItem={onCreateWorkItem}
             onDeleteWorkItem={onDeleteWorkItem}
+            onTogglePinnedNote={onTogglePinnedNote}
             onToggleTask={onToggleTask}
             onUpdateWorkItem={onUpdateWorkItem}
             onUpdateProfile={onUpdateProfile}
@@ -1042,6 +1231,8 @@ function PrivateDashboard({
             onCreateWorkItem={onCreateWorkItem}
             onDeleteScheduleEntry={onDeleteScheduleEntry}
             onDeleteWorkItem={onDeleteWorkItem}
+            onDuplicateActivity={onDuplicateActivity}
+            onTogglePinnedNote={onTogglePinnedNote}
             onUpdateActivity={onUpdateActivity}
             onUpdateScheduleEntry={onUpdateScheduleEntry}
             onToggleTask={onToggleTask}
@@ -1055,6 +1246,7 @@ function PrivateDashboard({
         {activeView === "settings" && (
           <SettingsView
             currentUserProfile={currentUserProfile}
+            data={operationalData}
             onUpdateCurrentUser={onUpdateCurrentUser}
             onUpdateProfile={onUpdateProfile}
             profiles={profiles}
@@ -1305,6 +1497,32 @@ function DashboardView({
           </div>
         </article>
       </section>
+
+      <section className="content-grid">
+        <article className="glass-panel activity-panel">
+          <div className="section-heading">
+            <div>
+              <p className="chrome-label">NOTE-07</p>
+              <h3>Notas destacadas</h3>
+            </div>
+            <Star size={18} />
+          </div>
+          {model.pinnedNotes.length ? (
+            <div className="compact-list">
+              {model.pinnedNotes.slice(0, 6).map((note) => (
+                <NoteRow key={note.id} note={note} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              action="Destacar una nota"
+              icon={Star}
+              text="Las notas fijadas se quedan visibles aqui para no perder contexto importante."
+              title="Sin notas destacadas"
+            />
+          )}
+        </article>
+      </section>
     </>
   );
 }
@@ -1314,6 +1532,7 @@ function ProfilesView({
   model,
   onCreateWorkItem,
   onDeleteWorkItem,
+  onTogglePinnedNote,
   onToggleTask,
   onUpdateProfile,
   onUpdateWorkItem,
@@ -1430,6 +1649,7 @@ function ProfilesView({
         data={data}
         onCreateWorkItem={onCreateWorkItem}
         onDeleteWorkItem={onDeleteWorkItem}
+        onTogglePinnedNote={onTogglePinnedNote}
         onToggleTask={onToggleTask}
         onUpdateWorkItem={onUpdateWorkItem}
         target={{ profileId: selectedProfile.id }}
@@ -1471,6 +1691,8 @@ function ActivitiesView({
   onCreateWorkItem,
   onDeleteScheduleEntry,
   onDeleteWorkItem,
+  onDuplicateActivity,
+  onTogglePinnedNote,
   onUpdateActivity,
   onUpdateScheduleEntry,
   onToggleTask,
@@ -1576,6 +1798,8 @@ function ActivitiesView({
           onCreateWorkItem={onCreateWorkItem}
           onDeleteScheduleEntry={onDeleteScheduleEntry}
           onDeleteWorkItem={onDeleteWorkItem}
+          onDuplicateActivity={onDuplicateActivity}
+          onTogglePinnedNote={onTogglePinnedNote}
           onUpdateActivity={onUpdateActivity}
           onUpdateScheduleEntry={onUpdateScheduleEntry}
           onToggleTask={onToggleTask}
@@ -1602,6 +1826,8 @@ function ActivityDetail({
   onCreateWorkItem,
   onDeleteScheduleEntry,
   onDeleteWorkItem,
+  onDuplicateActivity,
+  onTogglePinnedNote,
   onUpdateActivity,
   onUpdateScheduleEntry,
   onToggleTask,
@@ -1610,6 +1836,7 @@ function ActivityDetail({
   setSelectedActivityId,
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState("");
   const [timeProfileFilter, setTimeProfileFilter] = useState("all");
   const profileIds = getActivityProfileIds(activity);
   const schedules = data.scheduleEntries.filter((entry) => entry.activity_id === activity.id);
@@ -1632,6 +1859,23 @@ function ActivityDetail({
             {isEditing ? <X size={16} /> : <Pencil size={16} />}
             {isEditing ? "Cerrar" : "Editar"}
           </button>
+          <button
+            className="ghost-button"
+            onClick={async () => {
+              setDuplicateMessage("");
+              const result = await onDuplicateActivity(activity.id);
+              if (result.error) {
+                setDuplicateMessage(result.error);
+                return;
+              }
+              setSelectedActivityId(result.data.id);
+              setDuplicateMessage("Actividad duplicada.");
+            }}
+            type="button"
+          >
+            <Copy size={16} />
+            Duplicar
+          </button>
           <ArchiveActivityButton
             activityId={activity.id}
             onArchiveActivity={async (activityId) => {
@@ -1642,6 +1886,11 @@ function ActivityDetail({
           />
         </div>
       </div>
+      {duplicateMessage && (
+        <p className={duplicateMessage.includes("duplicada") ? "form-message is-success" : "form-message is-error"}>
+          {duplicateMessage}
+        </p>
+      )}
 
       <div className="activity-profile-stack detail-stack">
         {profileIds.length ? renderActivityProfiles(activity, profiles) : <span className="small-badge">Sin perfiles</span>}
@@ -1667,6 +1916,8 @@ function ActivityDetail({
         setProfileFilter={setTimeProfileFilter}
       />
 
+      <RelationalMap activity={activity} data={data} profiles={profiles} />
+
       <div className="detail-grid">
         <DetailBucket
           emptyText="No hay horarios vinculados a esta actividad."
@@ -1686,6 +1937,7 @@ function ActivityDetail({
         data={data}
         onCreateWorkItem={onCreateWorkItem}
         onDeleteWorkItem={onDeleteWorkItem}
+        onTogglePinnedNote={onTogglePinnedNote}
         onToggleTask={onToggleTask}
         onUpdateWorkItem={onUpdateWorkItem}
         target={{ activityId: activity.id, defaultProfileId: profileIds[0] || "" }}
@@ -2223,7 +2475,80 @@ function DetailBucket({ emptyText, icon: Icon, items, title }) {
   );
 }
 
-function SettingsView({ currentUserProfile, onUpdateCurrentUser, onUpdateProfile, profiles, role, session }) {
+function RelationalMap({ activity, data, profiles }) {
+  const linkedProfileIds = getActivityProfileIds(activity);
+  const linkedProfiles = profiles.filter((profile) => linkedProfileIds.includes(profile.id));
+  const nodes = [
+    ...linkedProfiles.map((profile) => ({
+      color: profile.color,
+      label: profile.name,
+      meta: profile.visible_role || "Perfil",
+      type: "Perfil",
+    })),
+    ...filterWorkItems(data.tools, { activityId: activity.id }).slice(0, 4).map((tool) => ({
+      label: tool.name,
+      meta: "Herramienta",
+      type: "Herramienta",
+    })),
+    ...filterWorkItems(data.topics, { activityId: activity.id }).slice(0, 4).map((topic) => ({
+      label: topic.title,
+      meta: (topic.tags ?? []).join(", ") || "Tema",
+      type: "Tema",
+    })),
+    ...filterWorkItems(data.pendingTasks, { activityId: activity.id }).slice(0, 4).map((task) => ({
+      label: task.title,
+      meta: statusLabel[task.status] ?? "Pendiente",
+      type: "Pendiente",
+    })),
+    ...filterWorkItems(data.notes, { activityId: activity.id }).slice(0, 4).map((note) => ({
+      label: truncateText(note.content, 34),
+      meta: note.is_pinned ? "Nota destacada" : "Nota",
+      type: "Nota",
+    })),
+  ];
+
+  return (
+    <section className="relational-map-panel">
+      <div className="section-heading">
+        <div>
+          <p className="chrome-label">MAP-07</p>
+          <h3>Mapa relacional</h3>
+        </div>
+        <GitBranch size={18} />
+      </div>
+      <div className="relation-canvas">
+        <div className="relation-center">
+          <span className="small-badge blue">Actividad</span>
+          <strong>{activity.title}</strong>
+        </div>
+        {nodes.length ? (
+          <div className="relation-node-grid">
+            {nodes.map((node, index) => (
+              <article
+                className="relation-node"
+                key={`${node.type}-${node.label}-${index}`}
+                style={{ "--profile-color": node.color || "#007aff" }}
+              >
+                <span>{node.type}</span>
+                <strong>{node.label}</strong>
+                <p>{node.meta}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            action="Anadir contexto"
+            icon={GitBranch}
+            text="Cuando esta actividad tenga perfiles, herramientas, temas, notas o pendientes se dibujaran aqui."
+            title="Sin relaciones"
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SettingsView({ currentUserProfile, data, onUpdateCurrentUser, onUpdateProfile, profiles, role, session }) {
   return (
     <>
       <UserSettingsPanel
@@ -2247,6 +2572,8 @@ function SettingsView({ currentUserProfile, onUpdateCurrentUser, onUpdateProfile
           ))}
         </div>
       </section>
+      <UserManagementPanel currentUserProfile={currentUserProfile} role={role} users={data.userProfiles} />
+      <AuditPanel changes={data.changes} users={data.userProfiles} />
     </>
   );
 }
@@ -2308,6 +2635,130 @@ function UserSettingsPanel({ currentUserProfile, onUpdateCurrentUser, session })
           {isSaving ? "Guardando..." : "Guardar ajustes"}
         </button>
       </form>
+    </section>
+  );
+}
+
+function UserManagementPanel({ currentUserProfile, role, users }) {
+  const visibleUsers = users.length ? users : currentUserProfile ? [currentUserProfile] : [];
+
+  return (
+    <section className="glass-panel backlog-panel">
+      <div className="section-heading">
+        <div>
+          <p className="chrome-label">ADMIN-02</p>
+          <h3>Gestion de usuarios</h3>
+        </div>
+        <span className={role === "admin" ? "small-badge green" : "small-badge"}>
+          {role === "admin" ? `${visibleUsers.length} usuarios` : "Vista propia"}
+        </span>
+      </div>
+      {visibleUsers.length ? (
+        <div className="user-list">
+          {visibleUsers.map((user) => (
+            <article className="user-row" key={user.id}>
+              <div className="user-avatar">
+                {(user.display_name || user.id).slice(0, 1).toUpperCase()}
+              </div>
+              <div>
+                <h4>{user.display_name || "Usuario sin nombre"}</h4>
+                <p>{shortUserId(user.id)}</p>
+              </div>
+              <div className="row-meta">
+                <span className={user.role === "admin" ? "small-badge green" : "small-badge blue"}>
+                  {user.role === "admin" ? "Admin" : "Usuario"}
+                </span>
+                <span className="small-badge">Act. {formatDate(user.updated_at || user.created_at)}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          action="Sin usuarios visibles"
+          icon={UserRound}
+          text="Cuando Supabase devuelva perfiles publicos apareceran en esta vista."
+          title="Gestion pendiente"
+        />
+      )}
+    </section>
+  );
+}
+
+function AuditPanel({ changes, users }) {
+  const [filters, setFilters] = useState({ entity: "all", from: "", query: "", user: "all" });
+  const filteredChanges = changes.filter((change) => {
+    if (filters.entity !== "all" && change.entity_type !== filters.entity) return false;
+    if (filters.user !== "all" && change.changed_by !== filters.user) return false;
+    if (filters.from && String(change.changed_at).slice(0, 10) < filters.from) return false;
+    if (filters.query && !normalizeSearchText(formatChangeSummary(change)).includes(normalizeSearchText(filters.query))) {
+      return false;
+    }
+    return true;
+  });
+  const usersById = new Map(users.map((user) => [user.id, user]));
+  const entities = [...new Set(changes.map((change) => change.entity_type).filter(Boolean))];
+  const actorIds = [...new Set(changes.map((change) => change.changed_by).filter(Boolean))];
+
+  return (
+    <section className="glass-panel backlog-panel">
+      <div className="section-heading">
+        <div>
+          <p className="chrome-label">ADMIN-05 / HIST-06</p>
+          <h3>Auditoria basica</h3>
+        </div>
+        <History size={18} />
+      </div>
+      <div className="audit-filter-grid">
+        <label>
+          Buscar
+          <input
+            onChange={(event) => setFormField(setFilters, "query", event.target.value)}
+            placeholder="Cambio, entidad..."
+            value={filters.query}
+          />
+        </label>
+        <label>
+          Entidad
+          <select onChange={(event) => setFormField(setFilters, "entity", event.target.value)} value={filters.entity}>
+            <option value="all">Todas</option>
+            {entities.map((entity) => (
+              <option key={entity} value={entity}>
+                {entityLabel(entity)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Usuario
+          <select onChange={(event) => setFormField(setFilters, "user", event.target.value)} value={filters.user}>
+            <option value="all">Todos</option>
+            {actorIds.map((actorId) => (
+              <option key={actorId} value={actorId}>
+                {usersById.get(actorId)?.display_name || shortUserId(actorId)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Desde
+          <input onChange={(event) => setFormField(setFilters, "from", event.target.value)} type="date" value={filters.from} />
+        </label>
+      </div>
+      {filteredChanges.length ? (
+        <div className="timeline-list">
+          {filteredChanges.slice(0, 20).map((change) => (
+            <ChangeRow change={change} key={change.id} />
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          action="Ajustar filtros"
+          icon={History}
+          text="No hay eventos de auditoria para el filtro actual."
+          title="Sin cambios"
+        />
+      )}
     </section>
   );
 }
@@ -2540,7 +2991,9 @@ function NoteRow({ note }) {
           {formatDate(note.updated_at || note.created_at)} · {shortUserId(note.updated_by || note.created_by)}
         </p>
       </div>
-      <span className="small-badge blue">Nota</span>
+      <span className={note.is_pinned ? "small-badge amber" : "small-badge blue"}>
+        {note.is_pinned ? "Destacada" : "Nota"}
+      </span>
     </article>
   );
 }
@@ -2577,13 +3030,14 @@ function WorkContextPanel({
   data,
   onCreateWorkItem,
   onDeleteWorkItem,
+  onTogglePinnedNote,
   onToggleTask,
   onUpdateWorkItem,
   target,
   title,
 }) {
   const itemsByKind = {
-    note: filterWorkItems(data.notes, target),
+    note: sortPinnedNotes(filterWorkItems(data.notes, target)),
     task: filterWorkItems(data.pendingTasks, target),
     tool: filterWorkItems(data.tools, target),
     topic: filterWorkItems(data.topics, target),
@@ -2593,7 +3047,7 @@ function WorkContextPanel({
     <section className="glass-panel work-context-panel">
       <div className="section-heading">
         <div>
-          <p className="chrome-label">Sprint 7</p>
+          <p className="chrome-label">Sprint 8</p>
           <h3>{title}</h3>
         </div>
         <span className="small-badge green">
@@ -2609,6 +3063,7 @@ function WorkContextPanel({
           kind="note"
           onCreateWorkItem={onCreateWorkItem}
           onDeleteWorkItem={onDeleteWorkItem}
+          onTogglePinnedNote={onTogglePinnedNote}
           onUpdateWorkItem={onUpdateWorkItem}
           target={target}
           title="Notas"
@@ -2621,6 +3076,7 @@ function WorkContextPanel({
           kind="topic"
           onCreateWorkItem={onCreateWorkItem}
           onDeleteWorkItem={onDeleteWorkItem}
+          onTogglePinnedNote={onTogglePinnedNote}
           onUpdateWorkItem={onUpdateWorkItem}
           target={target}
           title="Temas"
@@ -2633,6 +3089,7 @@ function WorkContextPanel({
           kind="task"
           onCreateWorkItem={onCreateWorkItem}
           onDeleteWorkItem={onDeleteWorkItem}
+          onTogglePinnedNote={onTogglePinnedNote}
           onToggleTask={onToggleTask}
           onUpdateWorkItem={onUpdateWorkItem}
           target={target}
@@ -2646,6 +3103,7 @@ function WorkContextPanel({
           kind="tool"
           onCreateWorkItem={onCreateWorkItem}
           onDeleteWorkItem={onDeleteWorkItem}
+          onTogglePinnedNote={onTogglePinnedNote}
           onUpdateWorkItem={onUpdateWorkItem}
           target={target}
           title="Herramientas"
@@ -2663,6 +3121,7 @@ function WorkItemColumn({
   kind,
   onCreateWorkItem,
   onDeleteWorkItem,
+  onTogglePinnedNote,
   onToggleTask,
   onUpdateWorkItem,
   target,
@@ -2729,6 +3188,7 @@ function WorkItemColumn({
               key={item.id}
               kind={kind}
               onDeleteWorkItem={onDeleteWorkItem}
+              onTogglePinnedNote={onTogglePinnedNote}
               onToggleTask={onToggleTask}
               onUpdateWorkItem={onUpdateWorkItem}
               target={target}
@@ -2742,7 +3202,16 @@ function WorkItemColumn({
   );
 }
 
-function WorkItemRow({ catalogTools, item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkItem, target }) {
+function WorkItemRow({
+  catalogTools,
+  item,
+  kind,
+  onDeleteWorkItem,
+  onTogglePinnedNote,
+  onToggleTask,
+  onUpdateWorkItem,
+  target,
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [message, setMessage] = useState("");
@@ -2765,8 +3234,21 @@ function WorkItemRow({ catalogTools, item, kind, onDeleteWorkItem, onToggleTask,
     if (result.error) setMessage(result.error);
   }
 
+  async function handleTogglePinned() {
+    const result = await onTogglePinnedNote(item.id);
+    if (result.error) setMessage(result.error);
+  }
+
   return (
-    <article className={kind === "task" && item.status === "completed" ? "work-item-row is-completed" : "work-item-row"}>
+    <article
+      className={[
+        "work-item-row",
+        kind === "task" && item.status === "completed" ? "is-completed" : "",
+        kind === "note" && item.is_pinned ? "is-pinned" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {isEditing ? (
         <WorkItemForm
           catalogTools={catalogTools}
@@ -2793,6 +3275,16 @@ function WorkItemRow({ catalogTools, item, kind, onDeleteWorkItem, onToggleTask,
             </small>
           </div>
           <div className="work-item-actions">
+            {kind === "note" && (
+              <button
+                className={item.is_pinned ? "icon-button is-active" : "icon-button"}
+                onClick={handleTogglePinned}
+                title={item.is_pinned ? "Quitar destacado" : "Destacar nota"}
+                type="button"
+              >
+                <Star size={15} />
+              </button>
+            )}
             {kind === "task" && (
               <button className="icon-button" onClick={handleToggleTask} title="Completar pendiente" type="button">
                 <CheckCircleIcon />
@@ -2997,6 +3489,7 @@ function buildDashboardModel(profiles, data) {
 
   return {
     activeActivities,
+    pinnedNotes: sortPinnedNotes(data.notes).filter((note) => note.is_pinned),
     profileSummaries,
     recentChanges: data.changes.slice(0, 10),
     recentNotes: [...data.notes].sort((left, right) =>
@@ -3061,6 +3554,7 @@ function toScheduleForm(activityId, entry, profiles) {
   return {
     activityId,
     endTime: entry?.end_time?.slice(0, 5) || "10:00",
+    expectedUpdatedAt: entry?.updated_at || "",
     notes: entry?.notes || "",
     profileId: entry?.profile_id || profiles[0]?.id || "",
     startTime: entry?.start_time?.slice(0, 5) || "09:00",
@@ -3392,7 +3886,7 @@ function workItemStateKey(kind) {
 }
 
 function workItemSelect(kind) {
-  if (kind === "note") return "id,profile_id,activity_id,content,created_by,updated_by,created_at,updated_at";
+  if (kind === "note") return "id,profile_id,activity_id,content,is_pinned,created_by,updated_by,created_at,updated_at";
   if (kind === "tool") return "id,profile_id,activity_id,name,description,created_by,updated_by,created_at,updated_at";
   if (kind === "topic") return "id,profile_id,activity_id,title,description,tags,created_by,updated_by,created_at,updated_at";
   return "id,title,status,priority,due_date,profile_id,activity_id,created_by,updated_by,created_at,updated_at";
@@ -3406,14 +3900,23 @@ function filterWorkItems(items, target) {
   });
 }
 
+function sortPinnedNotes(notes) {
+  return [...notes].sort((left, right) => {
+    const pinnedDiff = Number(Boolean(right.is_pinned)) - Number(Boolean(left.is_pinned));
+    if (pinnedDiff !== 0) return pinnedDiff;
+    return String(right.updated_at || right.created_at).localeCompare(String(left.updated_at || left.created_at));
+  });
+}
+
 function toWorkItemForm(kind, item, target) {
   const base = {
     activityId: item?.activity_id || target.activityId || "",
+    expectedUpdatedAt: item?.updated_at || "",
     profileId: item?.profile_id || target.profileId || target.defaultProfileId || "",
   };
 
   if (kind === "note") {
-    return { ...base, content: item?.content || "" };
+    return { ...base, content: item?.content || "", isPinned: Boolean(item?.is_pinned) };
   }
 
   if (kind === "topic") {
@@ -3460,6 +3963,7 @@ function toProfileForm(profile) {
   return {
     color: profile.color || "#007aff",
     description: profile.description || "",
+    expectedUpdatedAt: profile.updated_at || "",
     name: profile.name || "",
     visible_role: profile.visible_role || "",
   };
@@ -3475,6 +3979,7 @@ function toUserSettingsForm(currentUserProfile, session) {
 function toActivityForm(activity, profiles) {
   return {
     description: activity?.description || "",
+    expectedUpdatedAt: activity?.updated_at || "",
     profileIds: activity ? getActivityProfileIds(activity) : profiles.map((profile) => profile.id).slice(0, 1),
     status: activity?.status === "archived" ? "pending" : activity?.status || "pending",
     title: activity?.title || "",
@@ -3487,6 +3992,12 @@ function stableStringify(value) {
 
 function setFormField(setForm, field, value) {
   setForm((current) => ({ ...current, [field]: value }));
+}
+
+function detectConflict(expectedUpdatedAt, currentUpdatedAt) {
+  if (!expectedUpdatedAt || !currentUpdatedAt) return "";
+  if (expectedUpdatedAt === currentUpdatedAt) return "";
+  return "Este dato cambio en otra sesion. Revisa la version actual antes de guardar.";
 }
 
 function viewTitle(activeView, selectedProfile) {
@@ -3515,7 +4026,7 @@ function readableAuthError(message) {
 }
 
 function readableDatabaseError(message) {
-  if (message.toLowerCase().includes("visible_role")) {
+  if (message.toLowerCase().includes("visible_role") || message.toLowerCase().includes("is_pinned")) {
     return "Falta aplicar las migraciones pendientes.";
   }
 

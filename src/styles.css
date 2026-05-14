@@ -161,7 +161,7 @@ button:disabled {
 
 .segmented-control {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid rgba(67, 82, 106, 0.12);
@@ -436,6 +436,12 @@ button:disabled {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.62);
   color: var(--muted-strong);
+}
+
+.icon-button.is-active {
+  border-color: rgba(255, 159, 10, 0.32);
+  background: rgba(255, 159, 10, 0.16);
+  color: #9a5b00;
 }
 
 .status-dot {
@@ -1385,6 +1391,12 @@ textarea:focus-visible {
   opacity: 0.68;
 }
 
+.work-item-row.is-pinned {
+  border-color: rgba(255, 159, 10, 0.3);
+  background: rgba(255, 251, 240, 0.72);
+  box-shadow: inset 4px 0 0 var(--amber);
+}
+
 .work-item-row.is-completed h4 {
   text-decoration: line-through;
 }
@@ -1641,6 +1653,176 @@ textarea:focus-visible {
   gap: 14px;
 }
 
+.user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(67, 82, 106, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.user-avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(0, 122, 255, 0.12);
+  color: #0057b8;
+  font-weight: 850;
+}
+
+.user-row h4 {
+  margin: 0;
+}
+
+.user-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.audit-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 180px 180px 160px;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.relational-map-panel {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid rgba(67, 82, 106, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.relation-canvas {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.34fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.relation-center,
+.relation-node {
+  border: 1px solid rgba(67, 82, 106, 0.12);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.relation-center {
+  display: grid;
+  gap: 10px;
+  align-content: center;
+  min-height: 180px;
+  padding: 18px;
+  border-radius: 20px;
+  box-shadow: inset 5px 0 0 var(--blue);
+}
+
+.relation-center strong {
+  font-size: 1.18rem;
+  line-height: 1.2;
+}
+
+.relation-node-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.relation-node {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  min-height: 112px;
+  align-content: start;
+  padding: 13px;
+  border-radius: 18px;
+  box-shadow: inset 4px 0 0 var(--profile-color);
+}
+
+.relation-node span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.relation-node strong,
+.relation-node p {
+  overflow-wrap: anywhere;
+}
+
+.relation-node p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.profile-summary,
+.nav-item,
+.icon-button,
+.primary-button,
+.ghost-button,
+.danger-button,
+.filter-chip,
+.profile-tab,
+.activity-table-row,
+.compact-row,
+.work-item-row,
+.schedule-entry-row,
+.search-result-row,
+.relation-node,
+.user-row {
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.profile-summary:hover,
+.activity-table-row:hover,
+.compact-row:hover,
+.work-item-row:hover,
+.schedule-entry-row:hover,
+.search-result-row:hover,
+.relation-node:hover,
+.user-row:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:hover:not(:disabled),
+.ghost-button:hover:not(:disabled),
+.danger-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled),
+.filter-chip:hover,
+.profile-tab:hover,
+.nav-item:hover {
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 .profile-form {
   display: grid;
   gap: 12px;
@@ -1797,6 +1979,7 @@ textarea:focus-visible {
   .dashboard-grid,
   .content-grid,
   .range-toolbar,
+  .relation-canvas,
   .foundation-rail,
   .work-grid {
     grid-template-columns: 1fr;
@@ -1875,11 +2058,13 @@ textarea:focus-visible {
   .activity-table-row,
   .compact-row,
   .activity-detail-head,
+  .audit-filter-grid,
   .form-grid,
   .time-visual-grid,
   .date-input-row,
   .schedule-form-grid,
   .schedule-entry-row,
+  .user-row,
   .work-item-row,
   .work-task-grid,
   .detail-grid,

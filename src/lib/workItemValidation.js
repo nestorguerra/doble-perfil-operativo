@@ -32,6 +32,7 @@ export function normalizeWorkItemForm(kind, values) {
     return {
       ...base,
       content: (values.content ?? "").trim(),
+      is_pinned: Boolean(values.isPinned),
     };
   }
 
