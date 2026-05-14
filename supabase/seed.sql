@@ -1,0 +1,2 @@
+-- Seed reservado para datos de desarrollo.
+-- Los dos perfiles iniciales se insertan en la migracion 0001_initial_schema.sql.
