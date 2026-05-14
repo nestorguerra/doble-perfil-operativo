@@ -22,6 +22,7 @@ create table public.profiles (
   name text not null,
   description text,
   color text not null default '#007aff',
+  visible_role text not null default 'Perfil operativo',
   display_order smallint not null,
   is_active boolean not null default true,
   created_by uuid references auth.users(id) on delete set null default auth.uid(),
@@ -455,13 +456,14 @@ for select
 to authenticated
 using (true);
 
-insert into public.profiles (id, name, description, color, display_order, is_active)
+insert into public.profiles (id, name, description, color, visible_role, display_order, is_active)
 values
   (
     '11111111-1111-4111-8111-111111111111',
     'Perfil A',
     'Primer perfil operativo conectado al mapa de actividad.',
     '#007aff',
+    'Perfil operativo',
     1,
     true
   ),
@@ -470,6 +472,7 @@ values
     'Perfil B',
     'Segundo perfil operativo con horarios, notas y pendientes propios.',
     '#30d158',
+    'Perfil operativo',
     2,
     true
   )
@@ -478,5 +481,6 @@ set
   name = excluded.name,
   description = excluded.description,
   color = excluded.color,
+  visible_role = excluded.visible_role,
   display_order = excluded.display_order,
   is_active = excluded.is_active;

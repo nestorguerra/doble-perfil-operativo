@@ -4,12 +4,16 @@ Aplicacion web para gestionar dos perfiles operativos interconectados con activi
 
 ## Estado actual
 
-Sprint 1 - Login y Base Segura:
+Sprint 2 - Dashboard y Perfiles Interconectados:
 
 - App frontend inicial con React + Vite.
 - Sistema visual base con paneles tipo glass, tokens CSS, botones, inputs, badges y estados.
 - Configuracion preparada para GitHub Pages con `base: "./"`.
 - Login, registro controlado, sesion persistente, logout y rutas privadas.
+- Dashboard privado con resumen operativo.
+- Dos perfiles interconectados con fichas y edicion basica.
+- Indicadores de horas, actividades activas, pendientes y ultimos cambios.
+- Navegacion principal con Dashboard, Perfiles, Actividades y Ajustes.
 - Integracion con Supabase Auth y Supabase Realtime.
 - Migraciones SQL con tablas, relaciones, constraints, indices, RLS, roles y triggers de auditoria.
 - Documentacion de configuracion de Supabase, staging y QA de permisos.
@@ -57,8 +61,10 @@ supabase/
   migrations/
     0001_initial_schema.sql
     0002_auth_roles_and_permissions.sql
+    0003_profiles_dashboard_support.sql
 docs/
   SUPABASE_SETUP.md
   STAGING_DEPLOYMENT.md
   SPRINT_1_QA.md
+  SPRINT_2_DASHBOARD_PROFILES.md
 ```

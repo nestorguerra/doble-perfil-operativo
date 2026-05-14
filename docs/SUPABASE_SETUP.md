@@ -11,6 +11,7 @@ Dejar el backend listo para login seguro, base de datos persistente, sincronizac
 3. Ejecutar las migraciones en orden:
    - `supabase/migrations/0001_initial_schema.sql`
    - `supabase/migrations/0002_auth_roles_and_permissions.sql`
+   - `supabase/migrations/0003_profiles_dashboard_support.sql`
 4. Ir a Project Settings > API.
 5. Copiar `Project URL` y `anon public key`.
 6. Crear `.env` desde `.env.example`.
@@ -33,6 +34,7 @@ Tablas relevantes:
 - `auth.users`: usuarios reales gestionados por Supabase.
 - `public.user_profiles`: extension publica del usuario para nombre visible, rol y preferencias.
 - Roles iniciales: `user` y `admin`.
+- `profiles.visible_role`: rol operativo visible para cada perfil.
 
 ## Realtime
 
