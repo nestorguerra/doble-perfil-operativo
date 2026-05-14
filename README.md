@@ -43,6 +43,7 @@ Sprint 8 - QA, Produccion y GitHub Pages:
 - Integracion con Supabase Auth y Supabase Realtime.
 - Migraciones SQL con tablas, relaciones, constraints, indices, RLS, roles y triggers de auditoria.
 - Documentacion de configuracion de Supabase, staging y QA de permisos.
+- Matriz de trazabilidad completa y readiness de produccion en `docs/PRODUCT_TRACEABILITY_AND_PRODUCTION_READINESS.md`.
 
 ## Ejecutar en local
 
@@ -112,4 +113,5 @@ docs/
   SPRINT_6_AUTOSAVE_REALTIME_HISTORY.md
   SPRINT_7_COMMERCIAL_UX_ADMIN.md
   SPRINT_8_QA_PRODUCTION.md
+  PRODUCT_TRACEABILITY_AND_PRODUCTION_READINESS.md
 ```
