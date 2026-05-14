@@ -13,7 +13,7 @@ import {
   Layers3,
   LockKeyhole,
   LogOut,
-  Map,
+  Map as MapIcon,
   Pencil,
   Save,
   Search,
@@ -1182,7 +1182,7 @@ function AuthScreen({ onDemoLogin, syncState }) {
       <section className="auth-hero glass-panel">
         <div className="brand-block">
           <div className="brand-mark">
-            <Map size={22} />
+            <MapIcon size={22} />
           </div>
           <div>
             <p className="chrome-label">Sprint 8</p>
@@ -1453,7 +1453,7 @@ function PrivateDashboard({
       <aside className="sidebar glass-panel">
         <div className="brand-block">
           <div className="brand-mark">
-            <Map size={22} />
+            <MapIcon size={22} />
           </div>
           <div>
             <p className="chrome-label">Sprint 8</p>
@@ -2478,7 +2478,7 @@ function ActivityTimeSection({
         <article className="heatmap-panel">
           <div className="section-heading compact-heading">
             <h4>Heatmap por actividad</h4>
-            <Map size={17} />
+            <MapIcon size={17} />
           </div>
           <div className="heatmap-grid">
             {heatmapDays.map((day) => (
