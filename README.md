@@ -4,7 +4,7 @@ Aplicacion web para gestionar dos perfiles operativos interconectados con activi
 
 ## Estado actual
 
-Sprint 6 - Autosave, Realtime e Historico:
+Sprint 7 - UX Comercial, Responsive y Administracion:
 
 - App frontend inicial con React + Vite.
 - Sistema visual base con paneles tipo glass, tokens CSS, botones, inputs, badges y estados.
@@ -27,6 +27,12 @@ Sprint 6 - Autosave, Realtime e Historico:
 - Indicadores de guardado, error y reintento.
 - Sincronizacion realtime sobre tablas clave.
 - Historico legible por entidad y timeline en detalle de actividad.
+- Busqueda rapida en actividades, notas, pendientes, temas y herramientas.
+- Historico por perfil.
+- Vista mensual y filtro por rango de fechas en horarios.
+- Etiquetas simples en temas.
+- Filtros de pendientes y catalogo reutilizable de herramientas.
+- Ajustes de usuario con nombre visible y preferencias basicas.
 - Integracion con Supabase Auth y Supabase Realtime.
 - Migraciones SQL con tablas, relaciones, constraints, indices, RLS, roles y triggers de auditoria.
 - Documentacion de configuracion de Supabase, staging y QA de permisos.
@@ -86,6 +92,7 @@ supabase/
     0002_auth_roles_and_permissions.sql
     0003_profiles_dashboard_support.sql
     0004_autosave_realtime_history.sql
+    0005_commercial_ux_admin.sql
 docs/
   SUPABASE_SETUP.md
   STAGING_DEPLOYMENT.md
@@ -95,4 +102,5 @@ docs/
   SPRINT_4_TIME_ACTIVITY_MAP.md
   SPRINT_5_WORK_CONTEXT.md
   SPRINT_6_AUTOSAVE_REALTIME_HISTORY.md
+  SPRINT_7_COMMERCIAL_UX_ADMIN.md
 ```

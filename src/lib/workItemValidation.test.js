@@ -42,4 +42,22 @@ describe("work item validation", () => {
       title: "Revisar",
     });
   });
+
+  it("normalizes topic tags", () => {
+    expect(
+      normalizeWorkItemForm("topic", {
+        activityId: "activity-a",
+        description: "",
+        profileId: "",
+        tags: " estrategia, cliente,  ",
+        title: "Tema",
+      }),
+    ).toEqual({
+      activity_id: "activity-a",
+      description: "",
+      profile_id: null,
+      tags: ["estrategia", "cliente"],
+      title: "Tema",
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertCircle,
+  Archive,
   CalendarRange,
   CheckCircle2,
   Clock3,
@@ -13,9 +14,11 @@ import {
   Map,
   Pencil,
   Save,
+  Search,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  Tag,
   Trash2,
   UserRound,
   UserRoundPlus,
@@ -232,7 +235,7 @@ function App() {
           .order("display_order", { ascending: true }),
         supabase
           .from("user_profiles")
-          .select("id,display_name,role")
+          .select("id,display_name,role,preferences,updated_at")
           .eq("id", session.user.id)
           .maybeSingle(),
         supabase
@@ -243,7 +246,7 @@ function App() {
           .limit(50),
         supabase
           .from("schedule_entries")
-          .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes")
+          .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes,created_at,updated_at")
           .order("work_date", { ascending: false })
           .limit(200),
         supabase
@@ -258,7 +261,7 @@ function App() {
           .limit(50),
         supabase
           .from("topics")
-          .select("id,profile_id,activity_id,title,description,created_by,updated_by,created_at,updated_at")
+          .select("id,profile_id,activity_id,title,description,tags,created_by,updated_by,created_at,updated_at")
           .order("created_at", { ascending: false })
           .limit(50),
         supabase
@@ -371,6 +374,36 @@ function App() {
       current.map((profile) => (profile.id === profileId ? { ...profile, ...data } : profile)),
     );
 
+    return { data };
+  }
+
+  async function handleUpdateCurrentUser(values) {
+    if (!supabase || !session) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    if (!values.displayName.trim()) {
+      return { error: "El nombre visible es obligatorio." };
+    }
+
+    const payload = {
+      display_name: values.displayName.trim(),
+      preferences: {
+        ...(currentUserProfile?.preferences ?? {}),
+        density: values.density,
+      },
+    };
+
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .update(payload)
+      .eq("id", session.user.id)
+      .select("id,display_name,role,preferences,updated_at")
+      .single();
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setCurrentUserProfile(data);
     return { data };
   }
 
@@ -500,7 +533,7 @@ function App() {
     const { data, error } = await supabase
       .from("schedule_entries")
       .insert(payload)
-      .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes")
+      .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes,created_at,updated_at")
       .single();
 
     if (error) return { error: readableDatabaseError(error.message) };
@@ -526,7 +559,7 @@ function App() {
       .from("schedule_entries")
       .update(payload)
       .eq("id", entryId)
-      .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes")
+      .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes,created_at,updated_at")
       .single();
 
     if (error) return { error: readableDatabaseError(error.message) };
@@ -661,6 +694,7 @@ function App() {
       onSignOut={handleSignOut}
       onToggleTask={handleToggleTask}
       onUpdateActivity={handleUpdateActivity}
+      onUpdateCurrentUser={handleUpdateCurrentUser}
       onUpdateProfile={handleUpdateProfile}
       onUpdateScheduleEntry={handleUpdateScheduleEntry}
       onCreateWorkItem={handleCreateWorkItem}
@@ -753,21 +787,21 @@ function AuthScreen({ syncState }) {
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 6</p>
+            <p className="chrome-label">Sprint 7</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
         <div className="auth-copy">
-          <p className="chrome-label">Autosave y realtime</p>
-          <h2>Acceso protegido antes de sincronizar trabajo</h2>
+          <p className="chrome-label">UX comercial y responsive</p>
+          <h2>Acceso protegido para una herramienta profesional</h2>
           <p>
-            Guardado automatico, trazabilidad y cambios en tiempo real se activan solo cuando
-            Supabase confirma una sesion valida.
+            Busqueda, filtros, vista mensual y administracion se activan solo cuando Supabase
+            confirma una sesion valida.
           </p>
         </div>
         <div className="auth-security-grid">
           <SecurityPoint icon={LockKeyhole} title="Auth real" body="Email y contrasena gestionados por Supabase." />
-          <SecurityPoint icon={Layers3} title="Autosave" body="Debounce, indicador de guardado y reintento." />
+          <SecurityPoint icon={Layers3} title="UX comercial" body="Busqueda, filtros, responsive y estados claros." />
           <SecurityPoint icon={UserRoundPlus} title="Perfiles" body="Dos perfiles editables e interconectados." />
         </div>
       </section>
@@ -881,6 +915,7 @@ function PrivateDashboard({
   onSignOut,
   onToggleTask,
   onUpdateActivity,
+  onUpdateCurrentUser,
   onUpdateProfile,
   onUpdateScheduleEntry,
   onUpdateWorkItem,
@@ -892,6 +927,7 @@ function PrivateDashboard({
   const [activeView, setActiveView] = useState("dashboard");
   const [selectedProfileId, setSelectedProfileId] = useState(profiles[0]?.id ?? "");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!selectedProfileId && profiles[0]?.id) {
@@ -905,6 +941,10 @@ function PrivateDashboard({
     () => buildDashboardModel(profiles, operationalData),
     [profiles, operationalData],
   );
+  const searchResults = useMemo(
+    () => buildSearchResults(searchQuery, operationalData, profiles),
+    [operationalData, profiles, searchQuery],
+  );
   const selectedProfile = profiles.find((profile) => profile.id === selectedProfileId) ?? profiles[0];
 
   return (
@@ -915,7 +955,7 @@ function PrivateDashboard({
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 6</p>
+            <p className="chrome-label">Sprint 7</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -946,7 +986,7 @@ function PrivateDashboard({
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="chrome-label">Autosave, realtime e historico</p>
+            <p className="chrome-label">UX comercial, responsive y administracion</p>
             <h2>{viewTitle(activeView, selectedProfile)}</h2>
           </div>
           <div className="topbar-actions user-chip">
@@ -961,6 +1001,8 @@ function PrivateDashboard({
           </div>
         </header>
 
+        {syncState !== "Dashboard sincronizado" && <SyncStateBanner syncState={syncState} />}
+
         {activeView === "dashboard" && (
           <DashboardView
             model={dashboardModel}
@@ -969,6 +1011,9 @@ function PrivateDashboard({
               setSelectedProfileId(profileId);
               setActiveView("profiles");
             }}
+            searchQuery={searchQuery}
+            searchResults={searchResults}
+            setSearchQuery={setSearchQuery}
             setStatusFilter={setStatusFilter}
           />
         )}
@@ -1009,9 +1054,12 @@ function PrivateDashboard({
 
         {activeView === "settings" && (
           <SettingsView
+            currentUserProfile={currentUserProfile}
+            onUpdateCurrentUser={onUpdateCurrentUser}
             onUpdateProfile={onUpdateProfile}
             profiles={profiles}
             role={role}
+            session={session}
           />
         )}
       </section>
@@ -1019,9 +1067,68 @@ function PrivateDashboard({
   );
 }
 
-function DashboardView({ model, onOpenActivities, onOpenProfile, setStatusFilter }) {
+function DashboardView({
+  model,
+  onOpenActivities,
+  onOpenProfile,
+  searchQuery,
+  searchResults,
+  setSearchQuery,
+  setStatusFilter,
+}) {
   return (
     <>
+      <section className="glass-panel search-panel">
+        <div className="section-heading compact-heading">
+          <div>
+            <p className="chrome-label">DASH-06 / NOTE-06</p>
+            <h3>Busqueda rapida</h3>
+          </div>
+          <Search size={18} />
+        </div>
+        <label className="search-box">
+          <span>Buscar en actividades, notas, pendientes, temas y herramientas</span>
+          <input
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar contexto, trabajo, notas..."
+            value={searchQuery}
+          />
+        </label>
+        {searchQuery.trim() && (
+          <div className="search-results">
+            {searchResults.length ? (
+              searchResults.map((result) => (
+                <button
+                  className="search-result-row"
+                  key={`${result.type}-${result.id}`}
+                  onClick={() => {
+                    if (result.profileId) onOpenProfile(result.profileId);
+                    if (result.activityId) {
+                      setStatusFilter("all");
+                      onOpenActivities();
+                    }
+                  }}
+                  type="button"
+                >
+                  <span className="small-badge blue">{result.label}</span>
+                  <div>
+                    <strong>{result.title}</strong>
+                    <p>{result.description}</p>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <EmptyState
+                action="Prueba otra busqueda"
+                icon={Search}
+                text="No hay coincidencias en actividades, notas, pendientes, temas o herramientas."
+                title="Sin resultados"
+              />
+            )}
+          </div>
+        )}
+      </section>
+
       <section className="dashboard-grid">
         {model.profileSummaries.map((profile) => (
           <button
@@ -1230,6 +1337,7 @@ function ProfilesView({
   );
   const linkedSchedule = data.scheduleEntries.filter((entry) => entry.profile_id === selectedProfile.id);
   const sharedActivities = linkedActivities.filter((activity) => getActivityProfileIds(activity).length > 1);
+  const profileChanges = data.changes.filter((change) => profileChangeMatches(change, selectedProfile.id)).slice(0, 8);
 
   return (
     <>
@@ -1327,6 +1435,30 @@ function ProfilesView({
         target={{ profileId: selectedProfile.id }}
         title="Trabajo diario del perfil"
       />
+
+      <section className="glass-panel activity-panel">
+        <div className="section-heading">
+          <div>
+            <p className="chrome-label">HIST-05</p>
+            <h3>Historico del perfil</h3>
+          </div>
+          <History size={18} />
+        </div>
+        {profileChanges.length ? (
+          <div className="timeline-list">
+            {profileChanges.map((change) => (
+              <ChangeRow change={change} key={change.id} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            action="Editar perfil"
+            icon={History}
+            text="Los cambios vinculados a este perfil apareceran aqui."
+            title="Sin historico del perfil"
+          />
+        )}
+      </section>
     </>
   );
 }
@@ -1688,9 +1820,12 @@ function ActivityTimeSection({
   setProfileFilter,
 }) {
   const [isAdding, setIsAdding] = useState(false);
-  const totalMinutes = sumMinutes(schedules);
-  const weekDays = buildWeekDays(schedules);
-  const heatmapDays = buildHeatmapDays(schedules, profiles);
+  const [dateRange, setDateRange] = useState(() => defaultDateRange());
+  const rangedSchedules = useMemo(() => filterSchedulesByDateRange(schedules, dateRange), [dateRange, schedules]);
+  const totalMinutes = sumMinutes(rangedSchedules);
+  const weekDays = buildWeekDays(rangedSchedules);
+  const heatmapDays = buildHeatmapDays(rangedSchedules, profiles);
+  const monthDays = buildMonthDays(rangedSchedules, profiles, dateRange);
 
   useEffect(() => {
     if (profileFilter !== "all" && !profiles.some((profile) => profile.id === profileFilter)) {
@@ -1735,6 +1870,8 @@ function ActivityTimeSection({
           </button>
         ))}
       </div>
+
+      <DateRangeControls dateRange={dateRange} setDateRange={setDateRange} />
 
       {isAdding && (
         <ScheduleForm
@@ -1791,11 +1928,35 @@ function ActivityTimeSection({
             ))}
           </div>
         </article>
+
+        <article className="month-panel">
+          <div className="section-heading compact-heading">
+            <h4>Vista mensual</h4>
+            <CalendarRange size={17} />
+          </div>
+          <div className="month-grid">
+            {monthDays.map((day) =>
+              day.isBlank ? (
+                <span className="month-cell is-blank" key={day.key} />
+              ) : (
+                <div
+                  className={`month-cell intensity-${day.intensity}`}
+                  key={day.key}
+                  style={{ "--profile-color": day.color }}
+                  title={day.tooltip}
+                >
+                  <strong>{day.label}</strong>
+                  <span>{formatHours(day.minutes)}</span>
+                </div>
+              ),
+            )}
+          </div>
+        </article>
       </div>
 
-      {schedules.length ? (
+      {rangedSchedules.length ? (
         <div className="schedule-list">
-          {schedules.map((entry) => (
+          {rangedSchedules.map((entry) => (
             <ScheduleEntryEditor
               entry={entry}
               key={entry.id}
@@ -1809,7 +1970,7 @@ function ActivityTimeSection({
         <EmptyState
           action="Anadir bloque horario"
           icon={Clock3}
-          text="Registra fecha, hora de inicio, fin y perfil para alimentar el mapa."
+          text="Registra fecha, hora de inicio, fin y perfil, o amplia el rango de fechas."
           title="Sin bloques horarios"
         />
       )}
@@ -1926,6 +2087,44 @@ function ScheduleForm({ activityId, entry, onCancel, onSubmit, profiles }) {
   );
 }
 
+function DateRangeControls({ dateRange, setDateRange }) {
+  function updateRange(field, value) {
+    setDateRange((current) => ({ ...current, [field]: value, preset: "custom" }));
+  }
+
+  return (
+    <div className="range-toolbar">
+      <div className="filter-row compact">
+        {[
+          { label: "7 dias", value: "7" },
+          { label: "28 dias", value: "28" },
+          { label: "Mes", value: "month" },
+          { label: "Todo", value: "all" },
+        ].map((option) => (
+          <button
+            className={dateRange.preset === option.value ? "filter-chip is-selected" : "filter-chip"}
+            key={option.value}
+            onClick={() => setDateRange(presetDateRange(option.value))}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <div className="date-input-row">
+        <label>
+          Desde
+          <input onChange={(event) => updateRange("from", event.target.value)} type="date" value={dateRange.from} />
+        </label>
+        <label>
+          Hasta
+          <input onChange={(event) => updateRange("to", event.target.value)} type="date" value={dateRange.to} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
 function ScheduleEntryEditor({ entry, onDeleteScheduleEntry, onUpdateScheduleEntry, profiles }) {
   const [isEditing, setIsEditing] = useState(false);
   const [message, setMessage] = useState("");
@@ -1995,8 +2194,8 @@ function ArchiveActivityButton({ activityId, onArchiveActivity }) {
   return (
     <div className="archive-action">
       <button className={isConfirming ? "danger-button is-confirming" : "danger-button"} onClick={handleArchive} type="button">
-        <Trash2 size={16} />
-        {isDeleting ? "Eliminando..." : isConfirming ? "Confirmar" : "Eliminar"}
+        <Archive size={16} />
+        {isDeleting ? "Archivando..." : isConfirming ? "Confirmar" : "Archivar"}
       </button>
       {isConfirming && (
         <button className="ghost-button compact-button" onClick={() => setIsConfirming(false)} type="button">
@@ -2024,23 +2223,91 @@ function DetailBucket({ emptyText, icon: Icon, items, title }) {
   );
 }
 
-function SettingsView({ onUpdateProfile, profiles, role }) {
+function SettingsView({ currentUserProfile, onUpdateCurrentUser, onUpdateProfile, profiles, role, session }) {
+  return (
+    <>
+      <UserSettingsPanel
+        currentUserProfile={currentUserProfile}
+        onUpdateCurrentUser={onUpdateCurrentUser}
+        session={session}
+      />
+      <section className="glass-panel backlog-panel">
+        <div className="section-heading">
+          <div>
+            <p className="chrome-label">ADMIN-04</p>
+            <h3>Configuracion de perfiles</h3>
+          </div>
+          <span className={role === "admin" ? "small-badge green" : "small-badge"}>
+            {role === "admin" ? "Admin activo" : "Edicion basica"}
+          </span>
+        </div>
+        <div className="settings-grid">
+          {profiles.map((profile) => (
+            <ProfileEditor key={profile.id} profile={profile} onUpdateProfile={onUpdateProfile} compact />
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function UserSettingsPanel({ currentUserProfile, onUpdateCurrentUser, session }) {
+  const [form, setForm] = useState(() => toUserSettingsForm(currentUserProfile, session));
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(toUserSettingsForm(currentUserProfile, session));
+  }, [currentUserProfile, session]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setMessage("");
+    setIsSaving(true);
+    const result = await onUpdateCurrentUser(form);
+    setIsSaving(false);
+
+    if (result.error) {
+      setMessage(result.error);
+      return;
+    }
+
+    setMessage("Ajustes guardados.");
+  }
+
   return (
     <section className="glass-panel backlog-panel">
       <div className="section-heading">
         <div>
-          <p className="chrome-label">ADMIN-04</p>
-          <h3>Configuracion de perfiles</h3>
+          <p className="chrome-label">ADMIN-01</p>
+          <h3>Ajustes de usuario</h3>
         </div>
-        <span className={role === "admin" ? "small-badge green" : "small-badge"}>
-          {role === "admin" ? "Admin activo" : "Edicion basica"}
-        </span>
+        <span className="small-badge blue">{session.user.email}</span>
       </div>
-      <div className="settings-grid">
-        {profiles.map((profile) => (
-          <ProfileEditor key={profile.id} profile={profile} onUpdateProfile={onUpdateProfile} compact />
-        ))}
-      </div>
+      <form className="profile-form" onSubmit={handleSubmit}>
+        <div className="form-grid">
+          <label>
+            Nombre visible
+            <input
+              onChange={(event) => setFormField(setForm, "displayName", event.target.value)}
+              placeholder="Nombre visible"
+              value={form.displayName}
+            />
+          </label>
+          <label>
+            Densidad
+            <select onChange={(event) => setFormField(setForm, "density", event.target.value)} value={form.density}>
+              <option value="comfortable">Comoda</option>
+              <option value="compact">Compacta</option>
+            </select>
+          </label>
+        </div>
+        {message && <p className={message.includes("guardados") ? "form-message is-success" : "form-message is-error"}>{message}</p>}
+        <button className="primary-button" disabled={isSaving} type="submit">
+          <Save size={16} />
+          {isSaving ? "Guardando..." : "Guardar ajustes"}
+        </button>
+      </form>
     </section>
   );
 }
@@ -2201,6 +2468,17 @@ function Badge({ children, tone = "blue" }) {
   return <span className={`small-badge ${tone}`}>{children}</span>;
 }
 
+function SyncStateBanner({ syncState }) {
+  const isError = syncState.toLowerCase().includes("falta");
+
+  return (
+    <section className={isError ? "sync-banner is-error" : "sync-banner"}>
+      <ShieldCheck size={17} />
+      <span>{syncState}</span>
+    </section>
+  );
+}
+
 function AutosaveStatus({ autosave }) {
   if (!autosave || autosave.status === "idle") return null;
 
@@ -2315,7 +2593,7 @@ function WorkContextPanel({
     <section className="glass-panel work-context-panel">
       <div className="section-heading">
         <div>
-          <p className="chrome-label">Sprint 6</p>
+          <p className="chrome-label">Sprint 7</p>
           <h3>{title}</h3>
         </div>
         <span className="small-badge green">
@@ -2324,6 +2602,7 @@ function WorkContextPanel({
       </div>
       <div className="work-grid">
         <WorkItemColumn
+          catalogTools={data.tools}
           emptyText="Crea notas libres para capturar contexto."
           icon={History}
           items={itemsByKind.note}
@@ -2335,8 +2614,9 @@ function WorkContextPanel({
           title="Notas"
         />
         <WorkItemColumn
+          catalogTools={data.tools}
           emptyText="Registra temas trabajados y avances."
-          icon={Layers3}
+          icon={Tag}
           items={itemsByKind.topic}
           kind="topic"
           onCreateWorkItem={onCreateWorkItem}
@@ -2346,6 +2626,7 @@ function WorkContextPanel({
           title="Temas"
         />
         <WorkItemColumn
+          catalogTools={data.tools}
           emptyText="Anade pendientes con prioridad y fecha."
           icon={AlertCircle}
           items={itemsByKind.task}
@@ -2358,6 +2639,7 @@ function WorkContextPanel({
           title="Pendientes"
         />
         <WorkItemColumn
+          catalogTools={data.tools}
           emptyText="Documenta herramientas usadas."
           icon={SlidersHorizontal}
           items={itemsByKind.tool}
@@ -2374,6 +2656,7 @@ function WorkContextPanel({
 }
 
 function WorkItemColumn({
+  catalogTools,
   emptyText,
   icon: Icon,
   items,
@@ -2386,6 +2669,11 @@ function WorkItemColumn({
   title,
 }) {
   const [isCreating, setIsCreating] = useState(false);
+  const [taskStatusFilter, setTaskStatusFilter] = useState("all");
+  const visibleItems =
+    kind === "task" && taskStatusFilter !== "all"
+      ? items.filter((item) => item.status === taskStatusFilter)
+      : items;
 
   return (
     <article className="work-column">
@@ -2401,6 +2689,7 @@ function WorkItemColumn({
 
       {isCreating && (
         <WorkItemForm
+          catalogTools={catalogTools}
           kind={kind}
           onCancel={() => setIsCreating(false)}
           onSubmit={async (values) => {
@@ -2412,10 +2701,30 @@ function WorkItemColumn({
         />
       )}
 
-      {items.length ? (
+      {kind === "task" && (
+        <div className="filter-row mini-filter-row">
+          {[
+            { label: "Todos", value: "all" },
+            { label: "Abiertos", value: "open" },
+            { label: "Completados", value: "completed" },
+          ].map((option) => (
+            <button
+              className={taskStatusFilter === option.value ? "filter-chip is-selected" : "filter-chip"}
+              key={option.value}
+              onClick={() => setTaskStatusFilter(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {visibleItems.length ? (
         <div className="work-item-list">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <WorkItemRow
+              catalogTools={catalogTools}
               item={item}
               key={item.id}
               kind={kind}
@@ -2433,7 +2742,7 @@ function WorkItemColumn({
   );
 }
 
-function WorkItemRow({ item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkItem, target }) {
+function WorkItemRow({ catalogTools, item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkItem, target }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [message, setMessage] = useState("");
@@ -2460,6 +2769,7 @@ function WorkItemRow({ item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkI
     <article className={kind === "task" && item.status === "completed" ? "work-item-row is-completed" : "work-item-row"}>
       {isEditing ? (
         <WorkItemForm
+          catalogTools={catalogTools}
           item={item}
           kind={kind}
           onCancel={() => setIsEditing(false)}
@@ -2471,6 +2781,13 @@ function WorkItemRow({ item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkI
           <div>
             <h4>{workItemTitle(kind, item)}</h4>
             <p>{workItemDescription(kind, item)}</p>
+            {kind === "topic" && item.tags?.length > 0 && (
+              <div className="tag-row">
+                {item.tags.map((tag) => (
+                  <span className="small-badge" key={`${item.id}-${tag}`}>{tag}</span>
+                ))}
+              </div>
+            )}
             <small>
               {formatDate(item.updated_at || item.created_at)} · {shortUserId(item.updated_by || item.created_by)}
             </small>
@@ -2495,7 +2812,7 @@ function WorkItemRow({ item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkI
   );
 }
 
-function WorkItemForm({ item, kind, onCancel, onSubmit, target }) {
+function WorkItemForm({ catalogTools = [], item, kind, onCancel, onSubmit, target }) {
   const [form, setForm] = useState(() => toWorkItemForm(kind, item, target));
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -2558,6 +2875,43 @@ function WorkItemForm({ item, kind, onCancel, onSubmit, target }) {
           placeholder="Descripcion opcional"
           value={form.description}
         />
+      )}
+
+      {kind === "topic" && (
+        <label>
+          Etiquetas
+          <input
+            onChange={(event) => setFormField(setForm, "tags", event.target.value)}
+            placeholder="estrategia, investigacion, cliente"
+            value={form.tags}
+          />
+        </label>
+      )}
+
+      {kind === "tool" && catalogTools.length > 0 && !item && (
+        <label>
+          Catalogo reutilizable
+          <select
+            onChange={(event) => {
+              const tool = catalogTools.find((catalogItem) => catalogItem.id === event.target.value);
+              if (tool) {
+                setForm((current) => ({
+                  ...current,
+                  description: tool.description || "",
+                  name: tool.name || "",
+                }));
+              }
+            }}
+            value=""
+          >
+            <option value="">Seleccionar herramienta existente</option>
+            {uniqueTools(catalogTools).map((tool) => (
+              <option key={tool.id} value={tool.id}>
+                {tool.name}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
 
       {kind === "task" && (
@@ -2728,7 +3082,7 @@ function buildWeekDays(entries) {
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    const key = date.toISOString().slice(0, 10);
+    const key = toIsoDate(date);
     const dayEntries = entries.filter((entry) => entry.work_date === key);
     const minutes = sumMinutes(dayEntries);
 
@@ -2747,7 +3101,7 @@ function buildHeatmapDays(entries, profiles) {
   return Array.from({ length: 28 }, (_, index) => {
     const date = new Date(today);
     date.setDate(today.getDate() - (27 - index));
-    const key = date.toISOString().slice(0, 10);
+    const key = toIsoDate(date);
     const dayEntries = entries.filter((entry) => entry.work_date === key);
     const minutes = sumMinutes(dayEntries);
     const dominantProfileId = dominantProfile(dayEntries);
@@ -2817,6 +3171,104 @@ function activityChangeMatches(change, activityId) {
   );
 }
 
+function profileChangeMatches(change, profileId) {
+  return (
+    change.entity_id === profileId ||
+    change.before_data?.profile_id === profileId ||
+    change.after_data?.profile_id === profileId ||
+    change.before_data?.profileIds?.includes?.(profileId) ||
+    change.after_data?.profileIds?.includes?.(profileId)
+  );
+}
+
+function buildSearchResults(query, data, profiles) {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return [];
+
+  const profileName = (profileId) => profiles.find((profile) => profile.id === profileId)?.name ?? "";
+  const results = [];
+
+  data.activities.forEach((activity) => {
+    const haystack = normalizeSearchText(`${activity.title} ${activity.description}`);
+    if (haystack.includes(normalizedQuery)) {
+      results.push({
+        activityId: activity.id,
+        description: activity.description || "Actividad sin descripcion.",
+        id: activity.id,
+        label: "Actividad",
+        title: activity.title,
+        type: "activity",
+      });
+    }
+  });
+
+  data.notes.forEach((note) => {
+    if (normalizeSearchText(note.content).includes(normalizedQuery)) {
+      results.push({
+        activityId: note.activity_id,
+        description: `${profileName(note.profile_id)} · ${formatDate(note.updated_at || note.created_at)}`,
+        id: note.id,
+        label: "Nota",
+        profileId: note.profile_id,
+        title: truncateText(note.content, 60),
+        type: "note",
+      });
+    }
+  });
+
+  data.pendingTasks.forEach((task) => {
+    if (normalizeSearchText(task.title).includes(normalizedQuery)) {
+      results.push({
+        activityId: task.activity_id,
+        description: `${statusLabel[task.status] ?? task.status} · ${task.priority}`,
+        id: task.id,
+        label: "Pendiente",
+        profileId: task.profile_id,
+        title: task.title,
+        type: "task",
+      });
+    }
+  });
+
+  data.topics.forEach((topic) => {
+    if (normalizeSearchText(`${topic.title} ${topic.description} ${(topic.tags ?? []).join(" ")}`).includes(normalizedQuery)) {
+      results.push({
+        activityId: topic.activity_id,
+        description: topic.description || (topic.tags ?? []).join(", ") || "Tema trabajado",
+        id: topic.id,
+        label: "Tema",
+        profileId: topic.profile_id,
+        title: topic.title,
+        type: "topic",
+      });
+    }
+  });
+
+  data.tools.forEach((tool) => {
+    if (normalizeSearchText(`${tool.name} ${tool.description}`).includes(normalizedQuery)) {
+      results.push({
+        activityId: tool.activity_id,
+        description: tool.description || "Herramienta registrada",
+        id: tool.id,
+        label: "Herramienta",
+        profileId: tool.profile_id,
+        title: tool.name,
+        type: "tool",
+      });
+    }
+  });
+
+  return results.slice(0, 12);
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 function formatChangeSummary(change) {
   if (change.summary) return change.summary;
 
@@ -2848,6 +3300,79 @@ function validateProfileForm(values) {
   return "";
 }
 
+function defaultDateRange() {
+  return presetDateRange("28");
+}
+
+function presetDateRange(preset) {
+  const today = new Date();
+  if (preset === "all") return { from: "", preset, to: "" };
+
+  if (preset === "month") {
+    const from = new Date(today.getFullYear(), today.getMonth(), 1);
+    const to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    return { from: toIsoDate(from), preset, to: toIsoDate(to) };
+  }
+
+  const days = Number(preset) || 28;
+  const from = new Date(today);
+  from.setDate(today.getDate() - days + 1);
+  return { from: toIsoDate(from), preset, to: toIsoDate(today) };
+}
+
+function filterSchedulesByDateRange(entries, range) {
+  return entries.filter((entry) => {
+    if (range.from && entry.work_date < range.from) return false;
+    if (range.to && entry.work_date > range.to) return false;
+    return true;
+  });
+}
+
+function buildMonthDays(entries, profiles, range) {
+  const anchor = range.from ? new Date(`${range.from}T00:00:00`) : new Date();
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const last = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
+  const blanks = (first.getDay() + 6) % 7;
+  const days = Array.from({ length: blanks }, (_, index) => ({
+    isBlank: true,
+    key: `blank-${index}`,
+  }));
+
+  for (let day = 1; day <= last.getDate(); day += 1) {
+    const date = new Date(anchor.getFullYear(), anchor.getMonth(), day);
+    const key = toIsoDate(date);
+    const dayEntries = entries.filter((entry) => entry.work_date === key);
+    const minutes = sumMinutes(dayEntries);
+    const dominantProfileId = dominantProfile(dayEntries);
+    days.push({
+      color: dominantProfileId ? profileColor(dominantProfileId, profiles) : "rgba(67, 82, 106, 0.22)",
+      intensity: heatmapIntensity(minutes),
+      key,
+      label: String(day),
+      minutes,
+      tooltip: buildDayTooltip(key, dayEntries),
+    });
+  }
+
+  return days;
+}
+
+function toIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function uniqueTools(tools) {
+  const byName = new Map();
+  tools.forEach((tool) => {
+    const key = normalizeSearchText(tool.name);
+    if (key && !byName.has(key)) byName.set(key, tool);
+  });
+  return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
 function workItemTable(kind) {
   return {
     note: "notes",
@@ -2869,7 +3394,7 @@ function workItemStateKey(kind) {
 function workItemSelect(kind) {
   if (kind === "note") return "id,profile_id,activity_id,content,created_by,updated_by,created_at,updated_at";
   if (kind === "tool") return "id,profile_id,activity_id,name,description,created_by,updated_by,created_at,updated_at";
-  if (kind === "topic") return "id,profile_id,activity_id,title,description,created_by,updated_by,created_at,updated_at";
+  if (kind === "topic") return "id,profile_id,activity_id,title,description,tags,created_by,updated_by,created_at,updated_at";
   return "id,title,status,priority,due_date,profile_id,activity_id,created_by,updated_by,created_at,updated_at";
 }
 
@@ -2892,7 +3417,7 @@ function toWorkItemForm(kind, item, target) {
   }
 
   if (kind === "topic") {
-    return { ...base, description: item?.description || "", title: item?.title || "" };
+    return { ...base, description: item?.description || "", tags: (item?.tags ?? []).join(", "), title: item?.title || "" };
   }
 
   if (kind === "tool") {
@@ -2916,7 +3441,7 @@ function workItemTitle(kind, item) {
 
 function workItemDescription(kind, item) {
   if (kind === "note") return "Nota libre";
-  if (kind === "topic") return item.description || "Sin descripcion";
+  if (kind === "topic") return item.description || (item.tags ?? []).join(", ") || "Sin descripcion";
   if (kind === "tool") return item.description || "Sin descripcion";
 
   const priority = `Prioridad ${item.priority || "medium"}`;
@@ -2937,6 +3462,13 @@ function toProfileForm(profile) {
     description: profile.description || "",
     name: profile.name || "",
     visible_role: profile.visible_role || "",
+  };
+}
+
+function toUserSettingsForm(currentUserProfile, session) {
+  return {
+    density: currentUserProfile?.preferences?.density || "comfortable",
+    displayName: currentUserProfile?.display_name || session.user.email?.split("@")[0] || "",
   };
 }
 

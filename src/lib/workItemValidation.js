@@ -39,6 +39,7 @@ export function normalizeWorkItemForm(kind, values) {
     return {
       ...base,
       description: (values.description ?? "").trim(),
+      tags: normalizeTags(values.tags),
       title: (values.title ?? "").trim(),
     };
   }
@@ -58,4 +59,15 @@ export function normalizeWorkItemForm(kind, values) {
     status: values.status || "open",
     title: (values.title ?? "").trim(),
   };
+}
+
+export function normalizeTags(value) {
+  if (Array.isArray(value)) {
+    return value.map((tag) => tag.trim()).filter(Boolean);
+  }
+
+  return String(value ?? "")
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
 }
