@@ -1164,6 +1164,22 @@ textarea:focus {
   color: #a20f31;
 }
 
+.autosave-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 720;
+}
+
+.autosave-status .ghost-button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 0.76rem;
+}
+
 .work-context-panel {
   display: grid;
   gap: 4px;

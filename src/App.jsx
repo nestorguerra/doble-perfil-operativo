@@ -21,8 +21,9 @@ import {
   UserRoundPlus,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeActivityForm, validateActivityForm } from "./lib/activityValidation";
+import { AUTOSAVE_DELAY_MS, autosaveStatusLabel, autosaveStatusTone } from "./lib/autosave";
 import {
   normalizeEmail,
   validateLoginForm,
@@ -82,6 +83,83 @@ const emptyOperationalData = {
   topics: [],
 };
 
+function useAutosave({ delay = AUTOSAVE_DELAY_MS, enabled, onSave, resetKey, validate, value }) {
+  const [saveState, setSaveState] = useState({ error: "", status: "idle" });
+  const lastSavedValueRef = useRef(stableStringify(value));
+  const lastAttemptValueRef = useRef(value);
+  const resetKeyRef = useRef(resetKey);
+  const saveVersionRef = useRef(0);
+  const serializedValue = useMemo(() => stableStringify(value), [value]);
+
+  const saveNow = useCallback(
+    async (nextValue = lastAttemptValueRef.current) => {
+      const validationError = validate(nextValue);
+      if (validationError) {
+        setSaveState({ error: validationError, status: "error" });
+        return { error: validationError };
+      }
+
+      const saveVersion = saveVersionRef.current + 1;
+      saveVersionRef.current = saveVersion;
+      lastAttemptValueRef.current = nextValue;
+      setSaveState({ error: "", status: "saving" });
+
+      const result = await onSave(nextValue);
+
+      if (saveVersion !== saveVersionRef.current) {
+        return result;
+      }
+
+      if (result.error) {
+        setSaveState({ error: result.error, status: "error" });
+        return result;
+      }
+
+      lastSavedValueRef.current = stableStringify(nextValue);
+      setSaveState({ error: "", status: "saved" });
+      return result;
+    },
+    [onSave, validate],
+  );
+
+  useEffect(() => {
+    if (!enabled) {
+      lastSavedValueRef.current = serializedValue;
+      lastAttemptValueRef.current = value;
+      setSaveState({ error: "", status: "idle" });
+      return undefined;
+    }
+
+    if (resetKeyRef.current !== resetKey) {
+      resetKeyRef.current = resetKey;
+      lastSavedValueRef.current = serializedValue;
+      lastAttemptValueRef.current = value;
+      setSaveState({ error: "", status: "idle" });
+      return undefined;
+    }
+
+    if (serializedValue === lastSavedValueRef.current) {
+      return undefined;
+    }
+
+    lastAttemptValueRef.current = value;
+    setSaveState({ error: "", status: "dirty" });
+
+    const timeoutId = window.setTimeout(() => {
+      saveNow(value);
+    }, delay);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [delay, enabled, resetKey, saveNow, serializedValue, value]);
+
+  return {
+    error: saveState.error,
+    retry: () => saveNow(),
+    saveNow,
+    status: saveState.status,
+  };
+}
+
 function App() {
   const [authStatus, setAuthStatus] = useState(hasSupabaseConfig ? "loading" : "unauthenticated");
   const [session, setSession] = useState(null);
@@ -134,8 +212,8 @@ function App() {
 
     let ignore = false;
 
-    async function loadPrivateState() {
-      setSyncState("Sincronizando dashboard...");
+    async function loadPrivateState(nextSyncState = "Sincronizando dashboard...") {
+      setSyncState(nextSyncState);
 
       const [
         profileResult,
@@ -190,9 +268,9 @@ function App() {
           .limit(50),
         supabase
           .from("change_history")
-          .select("id,entity_type,entity_id,change_type,changed_by,summary,changed_at")
+          .select("id,entity_type,entity_id,change_type,changed_by,summary,before_data,after_data,changed_at")
           .order("changed_at", { ascending: false })
-          .limit(12),
+          .limit(80),
       ]);
 
       if (ignore) return;
@@ -241,10 +319,12 @@ function App() {
       "tools",
       "change_history",
     ];
-    const channel = supabase.channel("sprint-2-dashboard-realtime");
+    const channel = supabase.channel("sprint-6-dashboard-realtime");
 
     tables.forEach((table) => {
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, () => loadPrivateState());
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, () =>
+        loadPrivateState("Actualizando cambios en tiempo real..."),
+      );
     });
 
     channel.subscribe();
@@ -673,21 +753,21 @@ function AuthScreen({ syncState }) {
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 5</p>
+            <p className="chrome-label">Sprint 6</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
         <div className="auth-copy">
-          <p className="chrome-label">Trabajo diario completo</p>
-          <h2>Acceso protegido antes de gestionar contexto</h2>
+          <p className="chrome-label">Autosave y realtime</p>
+          <h2>Acceso protegido antes de sincronizar trabajo</h2>
           <p>
-            Notas, temas, pendientes, herramientas y horarios se cargan solo cuando Supabase
-            confirma una sesion valida.
+            Guardado automatico, trazabilidad y cambios en tiempo real se activan solo cuando
+            Supabase confirma una sesion valida.
           </p>
         </div>
         <div className="auth-security-grid">
           <SecurityPoint icon={LockKeyhole} title="Auth real" body="Email y contrasena gestionados por Supabase." />
-          <SecurityPoint icon={Layers3} title="Contexto diario" body="Notas, temas, pendientes y herramientas." />
+          <SecurityPoint icon={Layers3} title="Autosave" body="Debounce, indicador de guardado y reintento." />
           <SecurityPoint icon={UserRoundPlus} title="Perfiles" body="Dos perfiles editables e interconectados." />
         </div>
       </section>
@@ -835,7 +915,7 @@ function PrivateDashboard({
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 5</p>
+            <p className="chrome-label">Sprint 6</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -866,7 +946,7 @@ function PrivateDashboard({
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="chrome-label">Trabajo diario completo</p>
+            <p className="chrome-label">Autosave, realtime e historico</p>
             <h2>{viewTitle(activeView, selectedProfile)}</h2>
           </div>
           <div className="topbar-actions user-chip">
@@ -1404,7 +1484,7 @@ function ActivityDetail({
   const visibleSchedules = schedules.filter(
     (entry) => timeProfileFilter === "all" || entry.profile_id === timeProfileFilter,
   );
-  const changes = data.changes.filter((change) => change.entity_id === activity.id).slice(0, 6);
+  const changes = data.changes.filter((change) => activityChangeMatches(change, activity.id)).slice(0, 8);
 
   return (
     <section className="glass-panel activity-detail-panel">
@@ -1439,11 +1519,7 @@ function ActivityDetail({
         <ActivityForm
           activity={activity}
           onCancel={() => setIsEditing(false)}
-          onSubmit={async (values) => {
-            const result = await onUpdateActivity(activity.id, values);
-            if (!result.error) setIsEditing(false);
-            return result;
-          }}
+          onSubmit={(values) => onUpdateActivity(activity.id, values)}
           profiles={profiles}
         />
       )}
@@ -1469,8 +1545,8 @@ function ActivityDetail({
         <DetailBucket
           emptyText="No hay cambios registrados para esta actividad."
           icon={History}
-          items={changes.map((change) => `${change.summary} · ${formatDate(change.changed_at)}`)}
-          title="Cambios"
+          items={changes.map((change) => `${formatChangeSummary(change)} · ${formatDate(change.changed_at)}`)}
+          title="Historico"
         />
       </div>
 
@@ -1491,6 +1567,14 @@ function ActivityForm({ activity, onCancel, onSubmit, profiles }) {
   const [form, setForm] = useState(() => toActivityForm(activity, profiles));
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const saveActivity = useCallback((values) => onSubmit(values), [onSubmit]);
+  const autosave = useAutosave({
+    enabled: Boolean(activity),
+    onSave: saveActivity,
+    resetKey: activity ? `${activity.id}:${activity.updated_at}` : "new-activity",
+    validate: validateActivityForm,
+    value: form,
+  });
 
   useEffect(() => {
     setForm(toActivityForm(activity, profiles));
@@ -1579,10 +1663,11 @@ function ActivityForm({ activity, onCancel, onSubmit, profiles }) {
           {message}
         </p>
       )}
+      <AutosaveStatus autosave={autosave} />
       <div className="form-actions">
         <button className="primary-button" disabled={isSaving} type="submit">
           <Save size={16} />
-          {isSaving ? "Guardando..." : activity ? "Guardar actividad" : "Crear actividad"}
+          {isSaving ? "Guardando..." : activity ? "Guardar ahora" : "Crear actividad"}
         </button>
         <button className="ghost-button" onClick={onCancel} type="button">
           Cancelar
@@ -1737,6 +1822,14 @@ function ScheduleForm({ activityId, entry, onCancel, onSubmit, profiles }) {
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const calculatedMinutes = calculateScheduleFormMinutes(form);
+  const saveSchedule = useCallback((values) => onSubmit(values), [onSubmit]);
+  const autosave = useAutosave({
+    enabled: Boolean(entry),
+    onSave: saveSchedule,
+    resetKey: entry ? `${entry.id}:${entry.updated_at}` : "new-schedule",
+    validate: validateScheduleForm,
+    value: form,
+  });
 
   useEffect(() => {
     setForm(toScheduleForm(activityId, entry, profiles));
@@ -1820,9 +1913,10 @@ function ScheduleForm({ activityId, entry, onCancel, onSubmit, profiles }) {
             {message}
           </p>
         )}
+        <AutosaveStatus autosave={autosave} />
         <button className="primary-button" disabled={isSaving} type="submit">
           <Save size={16} />
-          {isSaving ? "Guardando..." : entry ? "Guardar bloque" : "Anadir bloque"}
+          {isSaving ? "Guardando..." : entry ? "Guardar ahora" : "Anadir bloque"}
         </button>
         <button className="ghost-button" onClick={onCancel} type="button">
           Cancelar
@@ -1849,11 +1943,7 @@ function ScheduleEntryEditor({ entry, onDeleteScheduleEntry, onUpdateScheduleEnt
           activityId={entry.activity_id}
           entry={entry}
           onCancel={() => setIsEditing(false)}
-          onSubmit={async (values) => {
-            const result = await onUpdateScheduleEntry(entry.id, values);
-            if (!result.error) setIsEditing(false);
-            return result;
-          }}
+          onSubmit={(values) => onUpdateScheduleEntry(entry.id, values)}
           profiles={profiles}
         />
       ) : (
@@ -1960,6 +2050,14 @@ function ProfileEditor({ compact = false, onUpdateProfile, profile }) {
   const [form, setForm] = useState(toProfileForm(profile));
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const saveProfile = useCallback((values) => onUpdateProfile(profile.id, values), [onUpdateProfile, profile.id]);
+  const autosave = useAutosave({
+    enabled: isEditing,
+    onSave: saveProfile,
+    resetKey: `${profile.id}:${profile.updated_at}`,
+    validate: validateProfileForm,
+    value: form,
+  });
 
   useEffect(() => {
     setForm(toProfileForm(profile));
@@ -2031,9 +2129,10 @@ function ProfileEditor({ compact = false, onUpdateProfile, profile }) {
             />
           </label>
           {message && <p className={message.includes("actualizado") ? "form-message is-success" : "form-message is-error"}>{message}</p>}
+          <AutosaveStatus autosave={autosave} />
           <button className="primary-button" disabled={isSaving} type="submit">
             <Save size={16} />
-            {isSaving ? "Guardando..." : "Guardar cambios"}
+            {isSaving ? "Guardando..." : "Guardar ahora"}
           </button>
         </form>
       ) : (
@@ -2102,6 +2201,26 @@ function Badge({ children, tone = "blue" }) {
   return <span className={`small-badge ${tone}`}>{children}</span>;
 }
 
+function AutosaveStatus({ autosave }) {
+  if (!autosave || autosave.status === "idle") return null;
+
+  const tone = autosaveStatusTone(autosave.status);
+
+  return (
+    <div className="autosave-status">
+      <span className={tone ? `small-badge ${tone}` : "small-badge"}>
+        {autosaveStatusLabel(autosave.status)}
+      </span>
+      {autosave.error && <span>{autosave.error}</span>}
+      {autosave.status === "error" && (
+        <button className="ghost-button compact-button" onClick={autosave.retry} type="button">
+          Reintentar
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ActivityRow({ activity }) {
   const sharedCount = getActivityProfileIds(activity).length;
 
@@ -2167,9 +2286,9 @@ function ChangeRow({ change }) {
     <article className="change-row">
       <span />
       <div>
-        <h4>{change.summary || `${change.entity_type} ${change.change_type}`}</h4>
+        <h4>{formatChangeSummary(change)}</h4>
         <p>
-          {change.entity_type} · {shortUserId(change.changed_by)} · {formatDate(change.changed_at)}
+          {entityLabel(change.entity_type)} · {shortUserId(change.changed_by)} · {formatDate(change.changed_at)}
         </p>
       </div>
     </article>
@@ -2196,7 +2315,7 @@ function WorkContextPanel({
     <section className="glass-panel work-context-panel">
       <div className="section-heading">
         <div>
-          <p className="chrome-label">Sprint 5</p>
+          <p className="chrome-label">Sprint 6</p>
           <h3>{title}</h3>
         </div>
         <span className="small-badge green">
@@ -2344,11 +2463,7 @@ function WorkItemRow({ item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkI
           item={item}
           kind={kind}
           onCancel={() => setIsEditing(false)}
-          onSubmit={async (values) => {
-            const result = await onUpdateWorkItem(kind, item.id, values);
-            if (!result.error) setIsEditing(false);
-            return result;
-          }}
+          onSubmit={(values) => onUpdateWorkItem(kind, item.id, values)}
           target={target}
         />
       ) : (
@@ -2384,6 +2499,15 @@ function WorkItemForm({ item, kind, onCancel, onSubmit, target }) {
   const [form, setForm] = useState(() => toWorkItemForm(kind, item, target));
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const validateWorkItem = useCallback((values) => validateWorkItemForm(kind, values), [kind]);
+  const saveWorkItem = useCallback((values) => onSubmit(values), [onSubmit]);
+  const autosave = useAutosave({
+    enabled: Boolean(item),
+    onSave: saveWorkItem,
+    resetKey: item ? `${item.id}:${item.updated_at}` : `new-${kind}`,
+    validate: validateWorkItem,
+    value: form,
+  });
 
   useEffect(() => {
     setForm(toWorkItemForm(kind, item, target));
@@ -2448,10 +2572,11 @@ function WorkItemForm({ item, kind, onCancel, onSubmit, target }) {
       )}
 
       {message && <p className={message === "Guardado." ? "form-message is-success" : "form-message is-error"}>{message}</p>}
+      <AutosaveStatus autosave={autosave} />
       <div className="form-actions">
         <button className="primary-button" disabled={isSaving} type="submit">
           <Save size={16} />
-          {isSaving ? "Guardando..." : "Guardar"}
+          {isSaving ? "Guardando..." : item ? "Guardar ahora" : "Guardar"}
         </button>
         <button className="ghost-button" onClick={onCancel} type="button">
           Cancelar
@@ -2519,7 +2644,7 @@ function buildDashboardModel(profiles, data) {
   return {
     activeActivities,
     profileSummaries,
-    recentChanges: data.changes,
+    recentChanges: data.changes.slice(0, 10),
     recentNotes: [...data.notes].sort((left, right) =>
       String(right.updated_at || right.created_at).localeCompare(String(left.updated_at || left.created_at)),
     ),
@@ -2684,6 +2809,45 @@ function priorityTone(priority) {
   return "green";
 }
 
+function activityChangeMatches(change, activityId) {
+  return (
+    change.entity_id === activityId ||
+    change.before_data?.activity_id === activityId ||
+    change.after_data?.activity_id === activityId
+  );
+}
+
+function formatChangeSummary(change) {
+  if (change.summary) return change.summary;
+
+  const action = {
+    delete: "eliminado",
+    insert: "creado",
+    update: "actualizado",
+  }[change.change_type] ?? change.change_type;
+
+  const payload = change.after_data || change.before_data || {};
+  const name = payload.title || payload.name || truncateText(payload.content, 34) || entityLabel(change.entity_type);
+  return `${entityLabel(change.entity_type)} ${action}: ${name}`;
+}
+
+function entityLabel(entityType) {
+  return {
+    activities: "Actividad",
+    notes: "Nota",
+    pending_tasks: "Pendiente",
+    profiles: "Perfil",
+    schedule_entries: "Horario",
+    tools: "Herramienta",
+    topics: "Tema",
+  }[entityType] ?? entityType;
+}
+
+function validateProfileForm(values) {
+  if (!values.name.trim()) return "El nombre del perfil es obligatorio.";
+  return "";
+}
+
 function workItemTable(kind) {
   return {
     note: "notes",
@@ -2783,6 +2947,10 @@ function toActivityForm(activity, profiles) {
     status: activity?.status === "archived" ? "pending" : activity?.status || "pending",
     title: activity?.title || "",
   };
+}
+
+function stableStringify(value) {
+  return JSON.stringify(value, Object.keys(value ?? {}).sort());
 }
 
 function setFormField(setForm, field, value) {
