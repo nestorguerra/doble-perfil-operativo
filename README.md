@@ -4,7 +4,7 @@ Aplicacion web para gestionar dos perfiles operativos interconectados con activi
 
 ## Estado actual
 
-Sprint 3 - Actividades:
+Sprint 4 - Horarios y Mapa Visual de Actividad:
 
 - App frontend inicial con React + Vite.
 - Sistema visual base con paneles tipo glass, tokens CSS, botones, inputs, badges y estados.
@@ -17,6 +17,9 @@ Sprint 3 - Actividades:
 - CRUD de actividades: crear, editar, listar, abrir detalle y eliminar logicamente.
 - Estados de actividad: pendiente, en curso, pausada y completada.
 - Detalle de actividad con horarios, notas, pendientes, herramientas, temas y cambios.
+- Registro de bloques horarios por actividad y perfil.
+- Calculo automatico de horas.
+- Vista semanal, heatmap por actividad, tooltips y filtro por perfil.
 - Integracion con Supabase Auth y Supabase Realtime.
 - Migraciones SQL con tablas, relaciones, constraints, indices, RLS, roles y triggers de auditoria.
 - Documentacion de configuracion de Supabase, staging y QA de permisos.
@@ -72,4 +75,5 @@ docs/
   SPRINT_1_QA.md
   SPRINT_2_DASHBOARD_PROFILES.md
   SPRINT_3_ACTIVITIES.md
+  SPRINT_4_TIME_ACTIVITY_MAP.md
 ```

@@ -28,6 +28,7 @@ import {
   validateRegistrationForm,
 } from "./lib/authValidation";
 import { hasSupabaseConfig, isRegistrationEnabled, supabase } from "./lib/supabase";
+import { calculateMinutes, normalizeScheduleForm, validateScheduleForm } from "./lib/timeValidation";
 import { profileSeed } from "./lib/seed";
 
 const navItems = [
@@ -405,6 +406,74 @@ function App() {
     return { data: true };
   }
 
+  async function handleCreateScheduleEntry(values) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const validationError = validateScheduleForm(values);
+    if (validationError) return { error: validationError };
+
+    const payload = normalizeScheduleForm(values);
+    const { data, error } = await supabase
+      .from("schedule_entries")
+      .insert(payload)
+      .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes")
+      .single();
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setOperationalData((current) => ({
+      ...current,
+      scheduleEntries: [data, ...current.scheduleEntries],
+    }));
+
+    return { data };
+  }
+
+  async function handleUpdateScheduleEntry(entryId, values) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const validationError = validateScheduleForm(values);
+    if (validationError) return { error: validationError };
+
+    const payload = normalizeScheduleForm(values);
+    const { data, error } = await supabase
+      .from("schedule_entries")
+      .update(payload)
+      .eq("id", entryId)
+      .select("id,activity_id,profile_id,work_date,start_time,end_time,total_minutes,notes")
+      .single();
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setOperationalData((current) => ({
+      ...current,
+      scheduleEntries: current.scheduleEntries.map((entry) => (entry.id === entryId ? data : entry)),
+    }));
+
+    return { data };
+  }
+
+  async function handleDeleteScheduleEntry(entryId) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const { error } = await supabase.from("schedule_entries").delete().eq("id", entryId);
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setOperationalData((current) => ({
+      ...current,
+      scheduleEntries: current.scheduleEntries.filter((entry) => entry.id !== entryId),
+    }));
+
+    return { data: true };
+  }
+
   if (authStatus === "loading") {
     return <LoadingScreen />;
   }
@@ -418,9 +487,12 @@ function App() {
       currentUserProfile={currentUserProfile}
       onArchiveActivity={handleArchiveActivity}
       onCreateActivity={handleCreateActivity}
+      onCreateScheduleEntry={handleCreateScheduleEntry}
+      onDeleteScheduleEntry={handleDeleteScheduleEntry}
       onSignOut={handleSignOut}
       onUpdateActivity={handleUpdateActivity}
       onUpdateProfile={handleUpdateProfile}
+      onUpdateScheduleEntry={handleUpdateScheduleEntry}
       operationalData={operationalData}
       profiles={profiles}
       session={session}
@@ -509,21 +581,21 @@ function AuthScreen({ syncState }) {
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 3</p>
+            <p className="chrome-label">Sprint 4</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
         <div className="auth-copy">
-          <p className="chrome-label">Actividades operativas</p>
-          <h2>Acceso protegido antes de gestionar actividades</h2>
+          <p className="chrome-label">Horarios y mapa visual</p>
+          <h2>Acceso protegido antes de registrar trabajo</h2>
           <p>
-            El CRUD de actividades, sus detalles y los datos asociados se cargan solo cuando
-            Supabase confirma una sesion valida.
+            Los bloques horarios, la semana de trabajo y el heatmap por actividad se cargan solo
+            cuando Supabase confirma una sesion valida.
           </p>
         </div>
         <div className="auth-security-grid">
           <SecurityPoint icon={LockKeyhole} title="Auth real" body="Email y contrasena gestionados por Supabase." />
-          <SecurityPoint icon={Layers3} title="Actividades" body="Crear, editar, filtrar y abrir detalle." />
+          <SecurityPoint icon={Layers3} title="Mapa visual" body="Semana, heatmap, horas y filtros por perfil." />
           <SecurityPoint icon={UserRoundPlus} title="Perfiles" body="Dos perfiles editables e interconectados." />
         </div>
       </section>
@@ -630,9 +702,12 @@ function PrivateDashboard({
   currentUserProfile,
   onArchiveActivity,
   onCreateActivity,
+  onCreateScheduleEntry,
+  onDeleteScheduleEntry,
   onSignOut,
   onUpdateActivity,
   onUpdateProfile,
+  onUpdateScheduleEntry,
   operationalData,
   profiles,
   session,
@@ -664,7 +739,7 @@ function PrivateDashboard({
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 3</p>
+            <p className="chrome-label">Sprint 4</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -695,7 +770,7 @@ function PrivateDashboard({
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="chrome-label">Actividades operativas</p>
+            <p className="chrome-label">Horarios y mapa visual</p>
             <h2>{viewTitle(activeView, selectedProfile)}</h2>
           </div>
           <div className="topbar-actions user-chip">
@@ -738,7 +813,10 @@ function PrivateDashboard({
             data={operationalData}
             onArchiveActivity={onArchiveActivity}
             onCreateActivity={onCreateActivity}
+            onCreateScheduleEntry={onCreateScheduleEntry}
+            onDeleteScheduleEntry={onDeleteScheduleEntry}
             onUpdateActivity={onUpdateActivity}
+            onUpdateScheduleEntry={onUpdateScheduleEntry}
             profiles={profiles}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
@@ -1080,7 +1158,10 @@ function ActivitiesView({
   data,
   onArchiveActivity,
   onCreateActivity,
+  onCreateScheduleEntry,
+  onDeleteScheduleEntry,
   onUpdateActivity,
+  onUpdateScheduleEntry,
   profiles,
   statusFilter,
   setStatusFilter,
@@ -1178,7 +1259,10 @@ function ActivitiesView({
           activity={selectedActivity}
           data={data}
           onArchiveActivity={onArchiveActivity}
+          onCreateScheduleEntry={onCreateScheduleEntry}
+          onDeleteScheduleEntry={onDeleteScheduleEntry}
           onUpdateActivity={onUpdateActivity}
+          onUpdateScheduleEntry={onUpdateScheduleEntry}
           profiles={profiles}
           setSelectedActivityId={setSelectedActivityId}
         />
@@ -1193,10 +1277,24 @@ function ActivitiesView({
   );
 }
 
-function ActivityDetail({ activity, data, onArchiveActivity, onUpdateActivity, profiles, setSelectedActivityId }) {
+function ActivityDetail({
+  activity,
+  data,
+  onArchiveActivity,
+  onCreateScheduleEntry,
+  onDeleteScheduleEntry,
+  onUpdateActivity,
+  onUpdateScheduleEntry,
+  profiles,
+  setSelectedActivityId,
+}) {
   const [isEditing, setIsEditing] = useState(false);
+  const [timeProfileFilter, setTimeProfileFilter] = useState("all");
   const profileIds = getActivityProfileIds(activity);
   const schedules = data.scheduleEntries.filter((entry) => entry.activity_id === activity.id);
+  const visibleSchedules = schedules.filter(
+    (entry) => timeProfileFilter === "all" || entry.profile_id === timeProfileFilter,
+  );
   const notes = data.notes.filter((note) => note.activity_id === activity.id);
   const pendingTasks = data.pendingTasks.filter((task) => task.activity_id === activity.id);
   const tools = data.tools.filter((tool) => tool.activity_id === activity.id);
@@ -1245,11 +1343,22 @@ function ActivityDetail({ activity, data, onArchiveActivity, onUpdateActivity, p
         />
       )}
 
+      <ActivityTimeSection
+        activity={activity}
+        onCreateScheduleEntry={onCreateScheduleEntry}
+        onDeleteScheduleEntry={onDeleteScheduleEntry}
+        onUpdateScheduleEntry={onUpdateScheduleEntry}
+        profileFilter={timeProfileFilter}
+        profiles={profiles.filter((profile) => profileIds.includes(profile.id))}
+        schedules={visibleSchedules}
+        setProfileFilter={setTimeProfileFilter}
+      />
+
       <div className="detail-grid">
         <DetailBucket
           emptyText="No hay horarios vinculados a esta actividad."
           icon={CalendarRange}
-          items={schedules.map((entry) => `${formatDate(entry.work_date)} · ${entry.start_time?.slice(0, 5)}-${entry.end_time?.slice(0, 5)} · ${formatHours(entry.total_minutes)}`)}
+          items={visibleSchedules.map((entry) => `${formatDate(entry.work_date)} · ${entry.start_time?.slice(0, 5)}-${entry.end_time?.slice(0, 5)} · ${formatHours(entry.total_minutes)}`)}
           title="Horarios"
         />
         <DetailBucket
@@ -1389,6 +1498,295 @@ function ActivityForm({ activity, onCancel, onSubmit, profiles }) {
         </button>
       </div>
     </form>
+  );
+}
+
+function ActivityTimeSection({
+  activity,
+  onCreateScheduleEntry,
+  onDeleteScheduleEntry,
+  onUpdateScheduleEntry,
+  profileFilter,
+  profiles,
+  schedules,
+  setProfileFilter,
+}) {
+  const [isAdding, setIsAdding] = useState(false);
+  const totalMinutes = sumMinutes(schedules);
+  const weekDays = buildWeekDays(schedules);
+  const heatmapDays = buildHeatmapDays(schedules, profiles);
+
+  useEffect(() => {
+    if (profileFilter !== "all" && !profiles.some((profile) => profile.id === profileFilter)) {
+      setProfileFilter("all");
+    }
+  }, [profileFilter, profiles, setProfileFilter]);
+
+  return (
+    <section className="time-section">
+      <div className="section-heading">
+        <div>
+          <p className="chrome-label">TIME-01 / MAP-01</p>
+          <h3>Horarios y mapa visual</h3>
+        </div>
+        <div className="section-actions">
+          <span className="small-badge green">{formatHours(totalMinutes)} registradas</span>
+          <button className="ghost-button" onClick={() => setIsAdding((current) => !current)} type="button">
+            {isAdding ? <X size={16} /> : <Clock3 size={16} />}
+            {isAdding ? "Cerrar" : "Anadir bloque"}
+          </button>
+        </div>
+      </div>
+
+      <div className="filter-row">
+        <button
+          className={profileFilter === "all" ? "filter-chip is-selected" : "filter-chip"}
+          onClick={() => setProfileFilter("all")}
+          type="button"
+        >
+          Todos los perfiles
+        </button>
+        {profiles.map((profile) => (
+          <button
+            className={profileFilter === profile.id ? "filter-chip is-selected" : "filter-chip"}
+            key={profile.id}
+            onClick={() => setProfileFilter(profile.id)}
+            style={{ "--profile-color": profile.color }}
+            type="button"
+          >
+            <span className="profile-dot" />
+            {profile.name}
+          </button>
+        ))}
+      </div>
+
+      {isAdding && (
+        <ScheduleForm
+          activityId={activity.id}
+          onCancel={() => setIsAdding(false)}
+          onSubmit={async (values) => {
+            const result = await onCreateScheduleEntry(values);
+            if (!result.error) setIsAdding(false);
+            return result;
+          }}
+          profiles={profiles}
+        />
+      )}
+
+      <div className="time-visual-grid">
+        <article className="weekly-panel">
+          <div className="section-heading compact-heading">
+            <h4>Semana de trabajo</h4>
+            <CalendarRange size={17} />
+          </div>
+          <div className="week-grid">
+            {weekDays.map((day) => (
+              <div className="week-day" key={day.key} title={day.tooltip}>
+                <strong>{day.label}</strong>
+                <span>{formatHours(day.minutes)}</span>
+                <div className="week-block-stack">
+                  {day.entries.slice(0, 3).map((entry) => (
+                    <span
+                      key={entry.id}
+                      style={{ "--profile-color": profileColor(entry.profile_id, profiles) }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="heatmap-panel">
+          <div className="section-heading compact-heading">
+            <h4>Heatmap por actividad</h4>
+            <Map size={17} />
+          </div>
+          <div className="heatmap-grid">
+            {heatmapDays.map((day) => (
+              <div
+                className={`heatmap-cell intensity-${day.intensity}`}
+                key={day.key}
+                style={{ "--profile-color": day.color }}
+                title={day.tooltip}
+              >
+                <span>{day.label}</span>
+              </div>
+            ))}
+          </div>
+        </article>
+      </div>
+
+      {schedules.length ? (
+        <div className="schedule-list">
+          {schedules.map((entry) => (
+            <ScheduleEntryEditor
+              entry={entry}
+              key={entry.id}
+              onDeleteScheduleEntry={onDeleteScheduleEntry}
+              onUpdateScheduleEntry={onUpdateScheduleEntry}
+              profiles={profiles}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          action="Anadir bloque horario"
+          icon={Clock3}
+          text="Registra fecha, hora de inicio, fin y perfil para alimentar el mapa."
+          title="Sin bloques horarios"
+        />
+      )}
+    </section>
+  );
+}
+
+function ScheduleForm({ activityId, entry, onCancel, onSubmit, profiles }) {
+  const [form, setForm] = useState(() => toScheduleForm(activityId, entry, profiles));
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const calculatedMinutes = calculateScheduleFormMinutes(form);
+
+  useEffect(() => {
+    setForm(toScheduleForm(activityId, entry, profiles));
+  }, [activityId, entry, profiles]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setMessage("");
+
+    const validationError = validateScheduleForm(form);
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+
+    setIsSaving(true);
+    const result = await onSubmit(form);
+    setIsSaving(false);
+
+    if (result.error) {
+      setMessage(result.error);
+      return;
+    }
+
+    setMessage("Bloque horario guardado.");
+  }
+
+  return (
+    <form className="schedule-form" onSubmit={handleSubmit}>
+      <div className="schedule-form-grid">
+        <label>
+          Fecha
+          <input
+            onChange={(event) => setFormField(setForm, "workDate", event.target.value)}
+            type="date"
+            value={form.workDate}
+          />
+        </label>
+        <label>
+          Inicio
+          <input
+            onChange={(event) => setFormField(setForm, "startTime", event.target.value)}
+            type="time"
+            value={form.startTime}
+          />
+        </label>
+        <label>
+          Fin
+          <input
+            onChange={(event) => setFormField(setForm, "endTime", event.target.value)}
+            type="time"
+            value={form.endTime}
+          />
+        </label>
+        <label>
+          Perfil
+          <select
+            onChange={(event) => setFormField(setForm, "profileId", event.target.value)}
+            value={form.profileId}
+          >
+            {profiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label>
+        Nota
+        <input
+          onChange={(event) => setFormField(setForm, "notes", event.target.value)}
+          placeholder="Contexto opcional del bloque"
+          value={form.notes}
+        />
+      </label>
+      <div className="schedule-form-footer">
+        <span className="small-badge green">{formatHours(Math.max(0, calculatedMinutes))}</span>
+        {message && (
+          <p className={message.includes("guardado") ? "form-message is-success" : "form-message is-error"}>
+            {message}
+          </p>
+        )}
+        <button className="primary-button" disabled={isSaving} type="submit">
+          <Save size={16} />
+          {isSaving ? "Guardando..." : entry ? "Guardar bloque" : "Anadir bloque"}
+        </button>
+        <button className="ghost-button" onClick={onCancel} type="button">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ScheduleEntryEditor({ entry, onDeleteScheduleEntry, onUpdateScheduleEntry, profiles }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [message, setMessage] = useState("");
+  const profile = profiles.find((item) => item.id === entry.profile_id);
+
+  async function handleDelete() {
+    const result = await onDeleteScheduleEntry(entry.id);
+    if (result.error) setMessage(result.error);
+  }
+
+  return (
+    <article className="schedule-entry-row" style={{ "--profile-color": profile?.color ?? "#007aff" }}>
+      {isEditing ? (
+        <ScheduleForm
+          activityId={entry.activity_id}
+          entry={entry}
+          onCancel={() => setIsEditing(false)}
+          onSubmit={async (values) => {
+            const result = await onUpdateScheduleEntry(entry.id, values);
+            if (!result.error) setIsEditing(false);
+            return result;
+          }}
+          profiles={profiles}
+        />
+      ) : (
+        <>
+          <div>
+            <h4>{formatDateLong(entry.work_date)}</h4>
+            <p>
+              {entry.start_time?.slice(0, 5)} - {entry.end_time?.slice(0, 5)} · {profile?.name ?? "Perfil"}
+            </p>
+            {entry.notes && <p>{entry.notes}</p>}
+          </div>
+          <div className="row-meta">
+            <span className="small-badge green">{formatHours(entry.total_minutes)}</span>
+            <button className="icon-button" onClick={() => setIsEditing(true)} title="Editar bloque" type="button">
+              <Pencil size={15} />
+            </button>
+            <button className="icon-button danger-icon" onClick={handleDelete} title="Eliminar bloque" type="button">
+              <Trash2 size={15} />
+            </button>
+          </div>
+          {message && <p className="form-message is-error">{message}</p>}
+        </>
+      )}
+    </article>
   );
 }
 
@@ -1782,9 +2180,111 @@ function formatDate(dateValue) {
   }).format(new Date(dateValue));
 }
 
+function formatDateLong(dateValue) {
+  if (!dateValue) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(dateValue));
+}
+
 function shortUserId(userId) {
   if (!userId) return "sin usuario";
   return `${userId.slice(0, 8)}...`;
+}
+
+function toScheduleForm(activityId, entry, profiles) {
+  return {
+    activityId,
+    endTime: entry?.end_time?.slice(0, 5) || "10:00",
+    notes: entry?.notes || "",
+    profileId: entry?.profile_id || profiles[0]?.id || "",
+    startTime: entry?.start_time?.slice(0, 5) || "09:00",
+    workDate: entry?.work_date || new Date().toISOString().slice(0, 10),
+  };
+}
+
+function calculateScheduleFormMinutes(form) {
+  return calculateMinutes(form.startTime, form.endTime);
+}
+
+function profileColor(profileId, profiles) {
+  return profiles.find((profile) => profile.id === profileId)?.color ?? "#007aff";
+}
+
+function buildWeekDays(entries) {
+  const today = new Date();
+  const start = startOfWeek(today);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const key = date.toISOString().slice(0, 10);
+    const dayEntries = entries.filter((entry) => entry.work_date === key);
+    const minutes = sumMinutes(dayEntries);
+
+    return {
+      entries: dayEntries,
+      key,
+      label: new Intl.DateTimeFormat("es-ES", { weekday: "short" }).format(date),
+      minutes,
+      tooltip: buildDayTooltip(key, dayEntries),
+    };
+  });
+}
+
+function buildHeatmapDays(entries, profiles) {
+  const today = new Date();
+  return Array.from({ length: 28 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (27 - index));
+    const key = date.toISOString().slice(0, 10);
+    const dayEntries = entries.filter((entry) => entry.work_date === key);
+    const minutes = sumMinutes(dayEntries);
+    const dominantProfileId = dominantProfile(dayEntries);
+
+    return {
+      color: dominantProfileId ? profileColor(dominantProfileId, profiles) : "rgba(67, 82, 106, 0.22)",
+      intensity: heatmapIntensity(minutes),
+      key,
+      label: new Intl.DateTimeFormat("es-ES", { day: "2-digit" }).format(date),
+      profileId: dominantProfileId,
+      tooltip: buildDayTooltip(key, dayEntries),
+    };
+  });
+}
+
+function dominantProfile(entries) {
+  const minutesByProfile = entries.reduce((acc, entry) => {
+    acc[entry.profile_id] = (acc[entry.profile_id] ?? 0) + (Number(entry.total_minutes) || 0);
+    return acc;
+  }, {});
+
+  return Object.entries(minutesByProfile).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+}
+
+function heatmapIntensity(minutes) {
+  if (!minutes) return 0;
+  if (minutes < 60) return 1;
+  if (minutes < 180) return 2;
+  if (minutes < 360) return 3;
+  return 4;
+}
+
+function buildDayTooltip(dateKey, entries) {
+  if (!entries.length) return `${formatDateLong(dateKey)} · sin trabajo registrado`;
+
+  const minutes = sumMinutes(entries);
+  const profiles = [...new Set(entries.map((entry) => entry.profile_id))].length;
+  return `${formatDateLong(dateKey)} · ${formatHours(minutes)} · ${profiles} perfil${profiles === 1 ? "" : "es"}`;
+}
+
+function startOfWeek(date) {
+  const normalized = new Date(date);
+  const day = normalized.getDay() || 7;
+  normalized.setDate(normalized.getDate() - day + 1);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
 }
 
 function statusTone(status) {
