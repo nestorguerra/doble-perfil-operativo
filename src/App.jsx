@@ -2,6 +2,7 @@ import {
   Activity,
   AlertCircle,
   CalendarRange,
+  CheckCircle2,
   Clock3,
   Filter,
   GitBranch,
@@ -29,6 +30,7 @@ import {
 } from "./lib/authValidation";
 import { hasSupabaseConfig, isRegistrationEnabled, supabase } from "./lib/supabase";
 import { calculateMinutes, normalizeScheduleForm, validateScheduleForm } from "./lib/timeValidation";
+import { normalizeWorkItemForm, validateWorkItemForm } from "./lib/workItemValidation";
 import { profileSeed } from "./lib/seed";
 
 const navItems = [
@@ -168,22 +170,22 @@ function App() {
           .limit(200),
         supabase
           .from("pending_tasks")
-          .select("id,title,status,priority,due_date,profile_id,activity_id,updated_at")
+          .select("id,title,status,priority,due_date,profile_id,activity_id,created_by,updated_by,created_at,updated_at")
           .order("due_date", { ascending: true, nullsFirst: false })
           .limit(50),
         supabase
           .from("notes")
-          .select("id,profile_id,activity_id,content,created_at")
+          .select("id,profile_id,activity_id,content,created_by,updated_by,created_at,updated_at")
           .order("created_at", { ascending: false })
           .limit(50),
         supabase
           .from("topics")
-          .select("id,profile_id,activity_id,title,description,created_at")
+          .select("id,profile_id,activity_id,title,description,created_by,updated_by,created_at,updated_at")
           .order("created_at", { ascending: false })
           .limit(50),
         supabase
           .from("tools")
-          .select("id,profile_id,activity_id,name,description,created_at")
+          .select("id,profile_id,activity_id,name,description,created_by,updated_by,created_at,updated_at")
           .order("created_at", { ascending: false })
           .limit(50),
         supabase
@@ -474,6 +476,92 @@ function App() {
     return { data: true };
   }
 
+  async function handleCreateWorkItem(kind, values) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const validationError = validateWorkItemForm(kind, values);
+    if (validationError) return { error: validationError };
+
+    const table = workItemTable(kind);
+    const payload = normalizeWorkItemForm(kind, values);
+    const { data, error } = await supabase
+      .from(table)
+      .insert(payload)
+      .select(workItemSelect(kind))
+      .single();
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setOperationalData((current) => ({
+      ...current,
+      [workItemStateKey(kind)]: [data, ...current[workItemStateKey(kind)]],
+    }));
+
+    return { data };
+  }
+
+  async function handleUpdateWorkItem(kind, itemId, values) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const validationError = validateWorkItemForm(kind, values);
+    if (validationError) return { error: validationError };
+
+    const table = workItemTable(kind);
+    const payload = normalizeWorkItemForm(kind, values);
+    const { data, error } = await supabase
+      .from(table)
+      .update(payload)
+      .eq("id", itemId)
+      .select(workItemSelect(kind))
+      .single();
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setOperationalData((current) => ({
+      ...current,
+      [workItemStateKey(kind)]: current[workItemStateKey(kind)].map((item) =>
+        item.id === itemId ? data : item,
+      ),
+    }));
+
+    return { data };
+  }
+
+  async function handleDeleteWorkItem(kind, itemId) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const { error } = await supabase.from(workItemTable(kind)).delete().eq("id", itemId);
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setOperationalData((current) => ({
+      ...current,
+      [workItemStateKey(kind)]: current[workItemStateKey(kind)].filter((item) => item.id !== itemId),
+    }));
+
+    return { data: true };
+  }
+
+  async function handleToggleTask(taskId, nextStatus) {
+    const task = operationalData.pendingTasks.find((item) => item.id === taskId);
+    if (!task) return { error: "No encuentro el pendiente." };
+
+    return handleUpdateWorkItem("task", taskId, {
+      activityId: task.activity_id || "",
+      dueDate: task.due_date || "",
+      priority: task.priority,
+      profileId: task.profile_id || "",
+      status: nextStatus,
+      title: task.title,
+    });
+  }
+
   if (authStatus === "loading") {
     return <LoadingScreen />;
   }
@@ -489,10 +577,14 @@ function App() {
       onCreateActivity={handleCreateActivity}
       onCreateScheduleEntry={handleCreateScheduleEntry}
       onDeleteScheduleEntry={handleDeleteScheduleEntry}
+      onDeleteWorkItem={handleDeleteWorkItem}
       onSignOut={handleSignOut}
+      onToggleTask={handleToggleTask}
       onUpdateActivity={handleUpdateActivity}
       onUpdateProfile={handleUpdateProfile}
       onUpdateScheduleEntry={handleUpdateScheduleEntry}
+      onCreateWorkItem={handleCreateWorkItem}
+      onUpdateWorkItem={handleUpdateWorkItem}
       operationalData={operationalData}
       profiles={profiles}
       session={session}
@@ -581,21 +673,21 @@ function AuthScreen({ syncState }) {
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 4</p>
+            <p className="chrome-label">Sprint 5</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
         <div className="auth-copy">
-          <p className="chrome-label">Horarios y mapa visual</p>
-          <h2>Acceso protegido antes de registrar trabajo</h2>
+          <p className="chrome-label">Trabajo diario completo</p>
+          <h2>Acceso protegido antes de gestionar contexto</h2>
           <p>
-            Los bloques horarios, la semana de trabajo y el heatmap por actividad se cargan solo
-            cuando Supabase confirma una sesion valida.
+            Notas, temas, pendientes, herramientas y horarios se cargan solo cuando Supabase
+            confirma una sesion valida.
           </p>
         </div>
         <div className="auth-security-grid">
           <SecurityPoint icon={LockKeyhole} title="Auth real" body="Email y contrasena gestionados por Supabase." />
-          <SecurityPoint icon={Layers3} title="Mapa visual" body="Semana, heatmap, horas y filtros por perfil." />
+          <SecurityPoint icon={Layers3} title="Contexto diario" body="Notas, temas, pendientes y herramientas." />
           <SecurityPoint icon={UserRoundPlus} title="Perfiles" body="Dos perfiles editables e interconectados." />
         </div>
       </section>
@@ -703,11 +795,15 @@ function PrivateDashboard({
   onArchiveActivity,
   onCreateActivity,
   onCreateScheduleEntry,
+  onCreateWorkItem,
   onDeleteScheduleEntry,
+  onDeleteWorkItem,
   onSignOut,
+  onToggleTask,
   onUpdateActivity,
   onUpdateProfile,
   onUpdateScheduleEntry,
+  onUpdateWorkItem,
   operationalData,
   profiles,
   session,
@@ -739,7 +835,7 @@ function PrivateDashboard({
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 4</p>
+            <p className="chrome-label">Sprint 5</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -770,7 +866,7 @@ function PrivateDashboard({
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="chrome-label">Horarios y mapa visual</p>
+            <p className="chrome-label">Trabajo diario completo</p>
             <h2>{viewTitle(activeView, selectedProfile)}</h2>
           </div>
           <div className="topbar-actions user-chip">
@@ -801,6 +897,10 @@ function PrivateDashboard({
           <ProfilesView
             data={operationalData}
             model={dashboardModel}
+            onCreateWorkItem={onCreateWorkItem}
+            onDeleteWorkItem={onDeleteWorkItem}
+            onToggleTask={onToggleTask}
+            onUpdateWorkItem={onUpdateWorkItem}
             onUpdateProfile={onUpdateProfile}
             profiles={profiles}
             selectedProfile={selectedProfile}
@@ -814,9 +914,13 @@ function PrivateDashboard({
             onArchiveActivity={onArchiveActivity}
             onCreateActivity={onCreateActivity}
             onCreateScheduleEntry={onCreateScheduleEntry}
+            onCreateWorkItem={onCreateWorkItem}
             onDeleteScheduleEntry={onDeleteScheduleEntry}
+            onDeleteWorkItem={onDeleteWorkItem}
             onUpdateActivity={onUpdateActivity}
             onUpdateScheduleEntry={onUpdateScheduleEntry}
+            onToggleTask={onToggleTask}
+            onUpdateWorkItem={onUpdateWorkItem}
             profiles={profiles}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
@@ -964,35 +1068,72 @@ function DashboardView({ model, onOpenActivities, onOpenProfile, setStatusFilter
         </article>
       </section>
 
-      <section className="glass-panel backlog-panel">
-        <div className="section-heading">
-          <div>
-            <p className="chrome-label">DASH-07</p>
-            <h3>Filtros rapidos de actividad</h3>
+      <section className="content-grid">
+        <article className="glass-panel activity-panel">
+          <div className="section-heading">
+            <div>
+              <p className="chrome-label">NOTE-05</p>
+              <h3>Notas recientes</h3>
+            </div>
+            <span className="small-badge blue">{model.recentNotes.length} notas</span>
           </div>
-          <Filter size={18} />
-        </div>
-        <div className="filter-row">
-          {statusFilters.map((filter) => (
-            <button
-              className="filter-chip"
-              key={filter.key}
-              onClick={() => {
-                setStatusFilter(filter.key);
-                onOpenActivities();
-              }}
-              type="button"
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
+          {model.recentNotes.length ? (
+            <div className="compact-list">
+              {model.recentNotes.slice(0, 5).map((note) => (
+                <NoteRow key={note.id} note={note} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              action="Anadir nota"
+              icon={History}
+              text="Las notas creadas en perfiles o actividades apareceran aqui ordenadas por fecha."
+              title="Sin notas recientes"
+            />
+          )}
+        </article>
+
+        <article className="glass-panel backlog-panel">
+          <div className="section-heading">
+            <div>
+              <p className="chrome-label">DASH-07</p>
+              <h3>Filtros rapidos de actividad</h3>
+            </div>
+            <Filter size={18} />
+          </div>
+          <div className="filter-row">
+            {statusFilters.map((filter) => (
+              <button
+                className="filter-chip"
+                key={filter.key}
+                onClick={() => {
+                  setStatusFilter(filter.key);
+                  onOpenActivities();
+                }}
+                type="button"
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </article>
       </section>
     </>
   );
 }
 
-function ProfilesView({ data, model, onUpdateProfile, profiles, selectedProfile, setSelectedProfileId }) {
+function ProfilesView({
+  data,
+  model,
+  onCreateWorkItem,
+  onDeleteWorkItem,
+  onToggleTask,
+  onUpdateProfile,
+  onUpdateWorkItem,
+  profiles,
+  selectedProfile,
+  setSelectedProfileId,
+}) {
   if (!selectedProfile) {
     return (
       <EmptyPanel
@@ -1007,11 +1148,7 @@ function ProfilesView({ data, model, onUpdateProfile, profiles, selectedProfile,
   const linkedActivities = data.activities.filter((activity) =>
     getActivityProfileIds(activity).includes(selectedProfile.id),
   );
-  const linkedTasks = data.pendingTasks.filter((task) => task.profile_id === selectedProfile.id);
   const linkedSchedule = data.scheduleEntries.filter((entry) => entry.profile_id === selectedProfile.id);
-  const linkedNotes = data.notes.filter((note) => note.profile_id === selectedProfile.id);
-  const linkedTopics = data.topics.filter((topic) => topic.profile_id === selectedProfile.id);
-  const linkedTools = data.tools.filter((tool) => tool.profile_id === selectedProfile.id);
   const sharedActivities = linkedActivities.filter((activity) => getActivityProfileIds(activity).length > 1);
 
   return (
@@ -1101,55 +1238,15 @@ function ProfilesView({ data, model, onUpdateProfile, profiles, selectedProfile,
         </article>
       </section>
 
-      <section className="content-grid">
-        <article className="glass-panel activity-panel">
-          <div className="section-heading">
-            <div>
-              <p className="chrome-label">Pendientes</p>
-              <h3>Trabajo abierto</h3>
-            </div>
-            <span className="small-badge amber">{linkedTasks.filter((task) => task.status === "open").length} abiertos</span>
-          </div>
-          {linkedTasks.length ? (
-            <div className="compact-list">
-              {linkedTasks.map((task) => (
-                <TaskRow key={task.id} task={task} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              action="Crear pendiente"
-              icon={AlertCircle}
-              text="Los pendientes relacionados con este perfil apareceran aqui."
-              title="Sin pendientes del perfil"
-            />
-          )}
-        </article>
-
-        <article className="glass-panel activity-panel">
-          <div className="section-heading">
-            <div>
-              <p className="chrome-label">Notas, temas y herramientas</p>
-              <h3>Contexto operativo</h3>
-            </div>
-            <span className="small-badge">{linkedNotes.length + linkedTopics.length + linkedTools.length} items</span>
-          </div>
-          {linkedNotes.length || linkedTopics.length || linkedTools.length ? (
-            <div className="context-grid">
-              <ContextBucket title="Notas" items={linkedNotes.map((note) => note.content)} />
-              <ContextBucket title="Temas" items={linkedTopics.map((topic) => topic.title)} />
-              <ContextBucket title="Herramientas" items={linkedTools.map((tool) => tool.name)} />
-            </div>
-          ) : (
-            <EmptyState
-              action="Anadir contexto"
-              icon={SlidersHorizontal}
-              text="Notas, temas y herramientas relacionados con este perfil apareceran aqui."
-              title="Sin contexto operativo"
-            />
-          )}
-        </article>
-      </section>
+      <WorkContextPanel
+        data={data}
+        onCreateWorkItem={onCreateWorkItem}
+        onDeleteWorkItem={onDeleteWorkItem}
+        onToggleTask={onToggleTask}
+        onUpdateWorkItem={onUpdateWorkItem}
+        target={{ profileId: selectedProfile.id }}
+        title="Trabajo diario del perfil"
+      />
     </>
   );
 }
@@ -1159,9 +1256,13 @@ function ActivitiesView({
   onArchiveActivity,
   onCreateActivity,
   onCreateScheduleEntry,
+  onCreateWorkItem,
   onDeleteScheduleEntry,
+  onDeleteWorkItem,
   onUpdateActivity,
   onUpdateScheduleEntry,
+  onToggleTask,
+  onUpdateWorkItem,
   profiles,
   statusFilter,
   setStatusFilter,
@@ -1260,9 +1361,13 @@ function ActivitiesView({
           data={data}
           onArchiveActivity={onArchiveActivity}
           onCreateScheduleEntry={onCreateScheduleEntry}
+          onCreateWorkItem={onCreateWorkItem}
           onDeleteScheduleEntry={onDeleteScheduleEntry}
+          onDeleteWorkItem={onDeleteWorkItem}
           onUpdateActivity={onUpdateActivity}
           onUpdateScheduleEntry={onUpdateScheduleEntry}
+          onToggleTask={onToggleTask}
+          onUpdateWorkItem={onUpdateWorkItem}
           profiles={profiles}
           setSelectedActivityId={setSelectedActivityId}
         />
@@ -1282,9 +1387,13 @@ function ActivityDetail({
   data,
   onArchiveActivity,
   onCreateScheduleEntry,
+  onCreateWorkItem,
   onDeleteScheduleEntry,
+  onDeleteWorkItem,
   onUpdateActivity,
   onUpdateScheduleEntry,
+  onToggleTask,
+  onUpdateWorkItem,
   profiles,
   setSelectedActivityId,
 }) {
@@ -1295,10 +1404,6 @@ function ActivityDetail({
   const visibleSchedules = schedules.filter(
     (entry) => timeProfileFilter === "all" || entry.profile_id === timeProfileFilter,
   );
-  const notes = data.notes.filter((note) => note.activity_id === activity.id);
-  const pendingTasks = data.pendingTasks.filter((task) => task.activity_id === activity.id);
-  const tools = data.tools.filter((tool) => tool.activity_id === activity.id);
-  const topics = data.topics.filter((topic) => topic.activity_id === activity.id);
   const changes = data.changes.filter((change) => change.entity_id === activity.id).slice(0, 6);
 
   return (
@@ -1362,36 +1467,22 @@ function ActivityDetail({
           title="Horarios"
         />
         <DetailBucket
-          emptyText="No hay notas vinculadas."
-          icon={History}
-          items={notes.map((note) => note.content)}
-          title="Notas"
-        />
-        <DetailBucket
-          emptyText="No hay pendientes vinculados."
-          icon={AlertCircle}
-          items={pendingTasks.map((task) => `${task.title} · ${statusLabel[task.status] ?? task.status}`)}
-          title="Pendientes"
-        />
-        <DetailBucket
-          emptyText="No hay herramientas vinculadas."
-          icon={SlidersHorizontal}
-          items={tools.map((tool) => tool.name)}
-          title="Herramientas"
-        />
-        <DetailBucket
-          emptyText="No hay temas vinculados."
-          icon={Layers3}
-          items={topics.map((topic) => topic.title)}
-          title="Temas"
-        />
-        <DetailBucket
           emptyText="No hay cambios registrados para esta actividad."
           icon={History}
           items={changes.map((change) => `${change.summary} · ${formatDate(change.changed_at)}`)}
           title="Cambios"
         />
       </div>
+
+      <WorkContextPanel
+        data={data}
+        onCreateWorkItem={onCreateWorkItem}
+        onDeleteWorkItem={onDeleteWorkItem}
+        onToggleTask={onToggleTask}
+        onUpdateWorkItem={onUpdateWorkItem}
+        target={{ activityId: activity.id, defaultProfileId: profileIds[0] || "" }}
+        title="Contexto diario de la actividad"
+      />
     </section>
   );
 }
@@ -2043,6 +2134,20 @@ function TaskRow({ task }) {
   );
 }
 
+function NoteRow({ note }) {
+  return (
+    <article className="compact-row">
+      <div>
+        <h4>{truncateText(note.content, 56)}</h4>
+        <p>
+          {formatDate(note.updated_at || note.created_at)} · {shortUserId(note.updated_by || note.created_by)}
+        </p>
+      </div>
+      <span className="small-badge blue">Nota</span>
+    </article>
+  );
+}
+
 function ScheduleRow({ entry }) {
   return (
     <article className="compact-row">
@@ -2071,17 +2176,293 @@ function ChangeRow({ change }) {
   );
 }
 
-function ContextBucket({ items, title }) {
+function WorkContextPanel({
+  data,
+  onCreateWorkItem,
+  onDeleteWorkItem,
+  onToggleTask,
+  onUpdateWorkItem,
+  target,
+  title,
+}) {
+  const itemsByKind = {
+    note: filterWorkItems(data.notes, target),
+    task: filterWorkItems(data.pendingTasks, target),
+    tool: filterWorkItems(data.tools, target),
+    topic: filterWorkItems(data.topics, target),
+  };
+
   return (
-    <div className="context-bucket">
-      <strong>{title}</strong>
-      {items.length ? (
-        items.slice(0, 4).map((item) => <span key={`${title}-${item}`}>{item}</span>)
-      ) : (
-        <p>Sin datos</p>
-      )}
-    </div>
+    <section className="glass-panel work-context-panel">
+      <div className="section-heading">
+        <div>
+          <p className="chrome-label">Sprint 5</p>
+          <h3>{title}</h3>
+        </div>
+        <span className="small-badge green">
+          {Object.values(itemsByKind).reduce((total, items) => total + items.length, 0)} items
+        </span>
+      </div>
+      <div className="work-grid">
+        <WorkItemColumn
+          emptyText="Crea notas libres para capturar contexto."
+          icon={History}
+          items={itemsByKind.note}
+          kind="note"
+          onCreateWorkItem={onCreateWorkItem}
+          onDeleteWorkItem={onDeleteWorkItem}
+          onUpdateWorkItem={onUpdateWorkItem}
+          target={target}
+          title="Notas"
+        />
+        <WorkItemColumn
+          emptyText="Registra temas trabajados y avances."
+          icon={Layers3}
+          items={itemsByKind.topic}
+          kind="topic"
+          onCreateWorkItem={onCreateWorkItem}
+          onDeleteWorkItem={onDeleteWorkItem}
+          onUpdateWorkItem={onUpdateWorkItem}
+          target={target}
+          title="Temas"
+        />
+        <WorkItemColumn
+          emptyText="Anade pendientes con prioridad y fecha."
+          icon={AlertCircle}
+          items={itemsByKind.task}
+          kind="task"
+          onCreateWorkItem={onCreateWorkItem}
+          onDeleteWorkItem={onDeleteWorkItem}
+          onToggleTask={onToggleTask}
+          onUpdateWorkItem={onUpdateWorkItem}
+          target={target}
+          title="Pendientes"
+        />
+        <WorkItemColumn
+          emptyText="Documenta herramientas usadas."
+          icon={SlidersHorizontal}
+          items={itemsByKind.tool}
+          kind="tool"
+          onCreateWorkItem={onCreateWorkItem}
+          onDeleteWorkItem={onDeleteWorkItem}
+          onUpdateWorkItem={onUpdateWorkItem}
+          target={target}
+          title="Herramientas"
+        />
+      </div>
+    </section>
   );
+}
+
+function WorkItemColumn({
+  emptyText,
+  icon: Icon,
+  items,
+  kind,
+  onCreateWorkItem,
+  onDeleteWorkItem,
+  onToggleTask,
+  onUpdateWorkItem,
+  target,
+  title,
+}) {
+  const [isCreating, setIsCreating] = useState(false);
+
+  return (
+    <article className="work-column">
+      <div className="work-column-head">
+        <div>
+          <Icon size={17} />
+          <strong>{title}</strong>
+        </div>
+        <button className="icon-button" onClick={() => setIsCreating((current) => !current)} type="button">
+          {isCreating ? <X size={15} /> : <Pencil size={15} />}
+        </button>
+      </div>
+
+      {isCreating && (
+        <WorkItemForm
+          kind={kind}
+          onCancel={() => setIsCreating(false)}
+          onSubmit={async (values) => {
+            const result = await onCreateWorkItem(kind, values);
+            if (!result.error) setIsCreating(false);
+            return result;
+          }}
+          target={target}
+        />
+      )}
+
+      {items.length ? (
+        <div className="work-item-list">
+          {items.map((item) => (
+            <WorkItemRow
+              item={item}
+              key={item.id}
+              kind={kind}
+              onDeleteWorkItem={onDeleteWorkItem}
+              onToggleTask={onToggleTask}
+              onUpdateWorkItem={onUpdateWorkItem}
+              target={target}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState action="Nuevo item" icon={Icon} text={emptyText} title={`Sin ${title.toLowerCase()}`} />
+      )}
+    </article>
+  );
+}
+
+function WorkItemRow({ item, kind, onDeleteWorkItem, onToggleTask, onUpdateWorkItem, target }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [message, setMessage] = useState("");
+
+  async function handleDelete() {
+    if (!isConfirmingDelete) {
+      setIsConfirmingDelete(true);
+      return;
+    }
+
+    const result = await onDeleteWorkItem(kind, item.id);
+    if (result.error) {
+      setMessage(result.error);
+      setIsConfirmingDelete(false);
+    }
+  }
+
+  async function handleToggleTask() {
+    const result = await onToggleTask(item.id, item.status === "completed" ? "open" : "completed");
+    if (result.error) setMessage(result.error);
+  }
+
+  return (
+    <article className={kind === "task" && item.status === "completed" ? "work-item-row is-completed" : "work-item-row"}>
+      {isEditing ? (
+        <WorkItemForm
+          item={item}
+          kind={kind}
+          onCancel={() => setIsEditing(false)}
+          onSubmit={async (values) => {
+            const result = await onUpdateWorkItem(kind, item.id, values);
+            if (!result.error) setIsEditing(false);
+            return result;
+          }}
+          target={target}
+        />
+      ) : (
+        <>
+          <div>
+            <h4>{workItemTitle(kind, item)}</h4>
+            <p>{workItemDescription(kind, item)}</p>
+            <small>
+              {formatDate(item.updated_at || item.created_at)} · {shortUserId(item.updated_by || item.created_by)}
+            </small>
+          </div>
+          <div className="work-item-actions">
+            {kind === "task" && (
+              <button className="icon-button" onClick={handleToggleTask} title="Completar pendiente" type="button">
+                <CheckCircleIcon />
+              </button>
+            )}
+            <button className="icon-button" onClick={() => setIsEditing(true)} title="Editar" type="button">
+              <Pencil size={15} />
+            </button>
+            <button className="icon-button danger-icon" onClick={handleDelete} title="Eliminar" type="button">
+              {isConfirmingDelete ? <CheckCircleIcon /> : <Trash2 size={15} />}
+            </button>
+          </div>
+          {message && <p className="form-message is-error">{message}</p>}
+        </>
+      )}
+    </article>
+  );
+}
+
+function WorkItemForm({ item, kind, onCancel, onSubmit, target }) {
+  const [form, setForm] = useState(() => toWorkItemForm(kind, item, target));
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(toWorkItemForm(kind, item, target));
+  }, [item, kind, target]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setMessage("");
+
+    const validationError = validateWorkItemForm(kind, form);
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+
+    setIsSaving(true);
+    const result = await onSubmit(form);
+    setIsSaving(false);
+
+    if (result.error) {
+      setMessage(result.error);
+      return;
+    }
+
+    setMessage("Guardado.");
+  }
+
+  return (
+    <form className="work-item-form" onSubmit={handleSubmit}>
+      {kind === "note" ? (
+        <textarea
+          onChange={(event) => setFormField(setForm, "content", event.target.value)}
+          placeholder="Escribe una nota"
+          rows="3"
+          value={form.content}
+        />
+      ) : (
+        <input
+          onChange={(event) => setFormField(setForm, kind === "tool" ? "name" : "title", event.target.value)}
+          placeholder={kind === "tool" ? "Nombre de herramienta" : kind === "task" ? "Titulo del pendiente" : "Tema trabajado"}
+          value={kind === "tool" ? form.name : form.title}
+        />
+      )}
+
+      {(kind === "topic" || kind === "tool") && (
+        <input
+          onChange={(event) => setFormField(setForm, "description", event.target.value)}
+          placeholder="Descripcion opcional"
+          value={form.description}
+        />
+      )}
+
+      {kind === "task" && (
+        <div className="work-task-grid">
+          <select onChange={(event) => setFormField(setForm, "priority", event.target.value)} value={form.priority}>
+            <option value="low">Baja</option>
+            <option value="medium">Media</option>
+            <option value="high">Alta</option>
+          </select>
+          <input onChange={(event) => setFormField(setForm, "dueDate", event.target.value)} type="date" value={form.dueDate} />
+        </div>
+      )}
+
+      {message && <p className={message === "Guardado." ? "form-message is-success" : "form-message is-error"}>{message}</p>}
+      <div className="form-actions">
+        <button className="primary-button" disabled={isSaving} type="submit">
+          <Save size={16} />
+          {isSaving ? "Guardando..." : "Guardar"}
+        </button>
+        <button className="ghost-button" onClick={onCancel} type="button">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CheckCircleIcon() {
+  return <CheckCircle2 size={15} />;
 }
 
 function EmptyPanel({ icon: Icon, text, title }) {
@@ -2139,6 +2520,9 @@ function buildDashboardModel(profiles, data) {
     activeActivities,
     profileSummaries,
     recentChanges: data.changes,
+    recentNotes: [...data.notes].sort((left, right) =>
+      String(right.updated_at || right.created_at).localeCompare(String(left.updated_at || left.created_at)),
+    ),
     totalMinutes,
     upcomingTasks,
   };
@@ -2298,6 +2682,89 @@ function priorityTone(priority) {
   if (priority === "urgent" || priority === "high") return "rose";
   if (priority === "medium") return "amber";
   return "green";
+}
+
+function workItemTable(kind) {
+  return {
+    note: "notes",
+    task: "pending_tasks",
+    tool: "tools",
+    topic: "topics",
+  }[kind];
+}
+
+function workItemStateKey(kind) {
+  return {
+    note: "notes",
+    task: "pendingTasks",
+    tool: "tools",
+    topic: "topics",
+  }[kind];
+}
+
+function workItemSelect(kind) {
+  if (kind === "note") return "id,profile_id,activity_id,content,created_by,updated_by,created_at,updated_at";
+  if (kind === "tool") return "id,profile_id,activity_id,name,description,created_by,updated_by,created_at,updated_at";
+  if (kind === "topic") return "id,profile_id,activity_id,title,description,created_by,updated_by,created_at,updated_at";
+  return "id,title,status,priority,due_date,profile_id,activity_id,created_by,updated_by,created_at,updated_at";
+}
+
+function filterWorkItems(items, target) {
+  return items.filter((item) => {
+    const matchesProfile = target.profileId ? item.profile_id === target.profileId : true;
+    const matchesActivity = target.activityId ? item.activity_id === target.activityId : true;
+    return matchesProfile && matchesActivity;
+  });
+}
+
+function toWorkItemForm(kind, item, target) {
+  const base = {
+    activityId: item?.activity_id || target.activityId || "",
+    profileId: item?.profile_id || target.profileId || target.defaultProfileId || "",
+  };
+
+  if (kind === "note") {
+    return { ...base, content: item?.content || "" };
+  }
+
+  if (kind === "topic") {
+    return { ...base, description: item?.description || "", title: item?.title || "" };
+  }
+
+  if (kind === "tool") {
+    return { ...base, description: item?.description || "", name: item?.name || "" };
+  }
+
+  return {
+    ...base,
+    dueDate: item?.due_date || "",
+    priority: item?.priority || "medium",
+    status: item?.status || "open",
+    title: item?.title || "",
+  };
+}
+
+function workItemTitle(kind, item) {
+  if (kind === "note") return truncateText(item.content, 48);
+  if (kind === "tool") return item.name;
+  return item.title;
+}
+
+function workItemDescription(kind, item) {
+  if (kind === "note") return "Nota libre";
+  if (kind === "topic") return item.description || "Sin descripcion";
+  if (kind === "tool") return item.description || "Sin descripcion";
+
+  const priority = `Prioridad ${item.priority || "medium"}`;
+  const dueDate = item.due_date ? `Fecha limite: ${formatDate(item.due_date)}` : "Sin fecha limite";
+  const status = statusLabel[item.status] ?? item.status;
+  return `${priority} · ${dueDate} · ${status}`;
+}
+
+function truncateText(value, maxLength) {
+  const text = value || "";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function toProfileForm(profile) {
