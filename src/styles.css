@@ -40,7 +40,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -595,7 +597,9 @@ label {
   font-weight: 740;
 }
 
-input {
+input,
+select,
+textarea {
   width: 100%;
   min-height: 46px;
   padding: 0 13px;
@@ -606,7 +610,15 @@ input {
   color: var(--ink);
 }
 
-input:focus {
+textarea {
+  min-height: 98px;
+  padding-top: 12px;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
   border-color: rgba(0, 122, 255, 0.58);
   box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.12);
 }
@@ -652,6 +664,25 @@ input:focus {
   background: var(--ink);
   color: #fff;
   box-shadow: 0 16px 30px rgba(18, 22, 32, 0.22);
+}
+
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 55, 95, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 55, 95, 0.12);
+  color: #a20f31;
+  font-weight: 780;
+}
+
+.danger-button.is-confirming {
+  background: var(--rose);
+  color: #fff;
 }
 
 .ghost-button {
@@ -821,6 +852,140 @@ input:focus {
   line-height: 1.5;
 }
 
+.section-actions,
+.detail-actions,
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.compact-button {
+  min-height: 36px;
+}
+
+.activity-form {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(67, 82, 106, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 12px;
+}
+
+.profile-check-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid rgba(67, 82, 106, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.profile-check input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.form-actions {
+  justify-content: flex-start;
+}
+
+.form-actions .primary-button {
+  width: auto;
+  padding: 0 14px;
+}
+
+.activity-detail-panel {
+  padding: 22px;
+  border-radius: var(--radius-lg);
+}
+
+.activity-detail-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.activity-detail-head h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  letter-spacing: 0;
+}
+
+.activity-detail-head p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.detail-stack {
+  margin-bottom: 18px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-bucket {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+  min-height: 168px;
+  padding: 14px;
+  border: 1px solid rgba(67, 82, 106, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.detail-bucket-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.detail-bucket span,
+.detail-bucket p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.detail-bucket span {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(67, 82, 106, 0.07);
+}
+
+.archive-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .compact-list,
 .timeline-list,
 .activity-table,
@@ -873,6 +1038,16 @@ input:focus {
   border: 1px solid rgba(67, 82, 106, 0.12);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.54);
+  color: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.activity-table-row.is-selected,
+.activity-table-row:hover {
+  border-color: rgba(0, 122, 255, 0.28);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 12px 32px rgba(46, 65, 95, 0.12);
 }
 
 .compact-row p,
@@ -1236,12 +1411,18 @@ input:focus {
   }
 
   .activity-table-row,
-  .compact-row {
+  .compact-row,
+  .activity-detail-head,
+  .form-grid,
+  .detail-grid,
+  .profile-check-grid {
     grid-template-columns: 1fr;
   }
 
   .row-meta,
-  .filter-row.compact {
+  .filter-row.compact,
+  .detail-actions,
+  .section-actions {
     justify-content: flex-start;
   }
 

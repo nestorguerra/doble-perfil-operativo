@@ -15,11 +15,13 @@ import {
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UserRound,
   UserRoundPlus,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeActivityForm, validateActivityForm } from "./lib/activityValidation";
 import {
   normalizeEmail,
   validateLoginForm,
@@ -155,6 +157,7 @@ function App() {
         supabase
           .from("activities")
           .select("id,title,description,status,updated_at,created_at,activity_profiles(profile_id)")
+          .neq("status", "archived")
           .order("updated_at", { ascending: false })
           .limit(50),
         supabase
@@ -204,7 +207,7 @@ function App() {
       ].some((result) => result.error);
 
       if (hasError) {
-        setSyncState("Supabase conectado, falta aplicar migraciones de Sprint 2");
+        setSyncState("Supabase conectado, falta aplicar migraciones pendientes");
         return;
       }
 
@@ -288,6 +291,120 @@ function App() {
     return { data };
   }
 
+  async function handleCreateActivity(values) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const validationError = validateActivityForm(values);
+    if (validationError) return { error: validationError };
+
+    const normalized = normalizeActivityForm(values);
+    const { data: createdActivity, error: activityError } = await supabase
+      .from("activities")
+      .insert({
+        description: normalized.description,
+        status: normalized.status,
+        title: normalized.title,
+      })
+      .select("id,title,description,status,updated_at,created_at")
+      .single();
+
+    if (activityError) return { error: readableDatabaseError(activityError.message) };
+
+    const links = normalized.profileIds.map((profileId) => ({
+      activity_id: createdActivity.id,
+      profile_id: profileId,
+    }));
+    const { error: linkError } = await supabase.from("activity_profiles").insert(links);
+
+    if (linkError) return { error: readableDatabaseError(linkError.message) };
+
+    const hydratedActivity = {
+      ...createdActivity,
+      activity_profiles: links.map((link) => ({ profile_id: link.profile_id })),
+    };
+
+    setOperationalData((current) => ({
+      ...current,
+      activities: [hydratedActivity, ...current.activities],
+    }));
+
+    return { data: hydratedActivity };
+  }
+
+  async function handleUpdateActivity(activityId, values) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const validationError = validateActivityForm(values);
+    if (validationError) return { error: validationError };
+
+    const normalized = normalizeActivityForm(values);
+    const { data: updatedActivity, error: activityError } = await supabase
+      .from("activities")
+      .update({
+        description: normalized.description,
+        status: normalized.status,
+        title: normalized.title,
+      })
+      .eq("id", activityId)
+      .select("id,title,description,status,updated_at,created_at")
+      .single();
+
+    if (activityError) return { error: readableDatabaseError(activityError.message) };
+
+    const { error: deleteLinksError } = await supabase
+      .from("activity_profiles")
+      .delete()
+      .eq("activity_id", activityId);
+
+    if (deleteLinksError) return { error: readableDatabaseError(deleteLinksError.message) };
+
+    const links = normalized.profileIds.map((profileId) => ({
+      activity_id: activityId,
+      profile_id: profileId,
+    }));
+    const { error: insertLinksError } = await supabase.from("activity_profiles").insert(links);
+
+    if (insertLinksError) return { error: readableDatabaseError(insertLinksError.message) };
+
+    const hydratedActivity = {
+      ...updatedActivity,
+      activity_profiles: links.map((link) => ({ profile_id: link.profile_id })),
+    };
+
+    setOperationalData((current) => ({
+      ...current,
+      activities: current.activities.map((activity) =>
+        activity.id === activityId ? hydratedActivity : activity,
+      ),
+    }));
+
+    return { data: hydratedActivity };
+  }
+
+  async function handleArchiveActivity(activityId) {
+    if (!supabase) {
+      return { error: "Supabase no esta configurado." };
+    }
+
+    const { error } = await supabase
+      .from("activities")
+      .update({ status: "archived" })
+      .eq("id", activityId);
+
+    if (error) return { error: readableDatabaseError(error.message) };
+
+    setOperationalData((current) => ({
+      ...current,
+      activities: current.activities.filter((activity) => activity.id !== activityId),
+    }));
+
+    return { data: true };
+  }
+
   if (authStatus === "loading") {
     return <LoadingScreen />;
   }
@@ -299,7 +416,10 @@ function App() {
   return (
     <PrivateDashboard
       currentUserProfile={currentUserProfile}
+      onArchiveActivity={handleArchiveActivity}
+      onCreateActivity={handleCreateActivity}
       onSignOut={handleSignOut}
+      onUpdateActivity={handleUpdateActivity}
       onUpdateProfile={handleUpdateProfile}
       operationalData={operationalData}
       profiles={profiles}
@@ -389,21 +509,21 @@ function AuthScreen({ syncState }) {
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 2</p>
+            <p className="chrome-label">Sprint 3</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
         <div className="auth-copy">
-          <p className="chrome-label">Dashboard y perfiles interconectados</p>
-          <h2>Acceso protegido antes de mostrar datos privados</h2>
+          <p className="chrome-label">Actividades operativas</p>
+          <h2>Acceso protegido antes de gestionar actividades</h2>
           <p>
-            El dashboard operativo, las fichas de perfil y los indicadores de actividad se cargan
-            solo cuando Supabase confirma una sesion valida.
+            El CRUD de actividades, sus detalles y los datos asociados se cargan solo cuando
+            Supabase confirma una sesion valida.
           </p>
         </div>
         <div className="auth-security-grid">
           <SecurityPoint icon={LockKeyhole} title="Auth real" body="Email y contrasena gestionados por Supabase." />
-          <SecurityPoint icon={Layers3} title="Dashboard" body="Resumen, filtros, horas, cambios y pendientes." />
+          <SecurityPoint icon={Layers3} title="Actividades" body="Crear, editar, filtrar y abrir detalle." />
           <SecurityPoint icon={UserRoundPlus} title="Perfiles" body="Dos perfiles editables e interconectados." />
         </div>
       </section>
@@ -508,7 +628,10 @@ function AuthScreen({ syncState }) {
 
 function PrivateDashboard({
   currentUserProfile,
+  onArchiveActivity,
+  onCreateActivity,
   onSignOut,
+  onUpdateActivity,
   onUpdateProfile,
   operationalData,
   profiles,
@@ -541,7 +664,7 @@ function PrivateDashboard({
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 2</p>
+            <p className="chrome-label">Sprint 3</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -572,7 +695,7 @@ function PrivateDashboard({
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="chrome-label">Dashboard y perfiles interconectados</p>
+            <p className="chrome-label">Actividades operativas</p>
             <h2>{viewTitle(activeView, selectedProfile)}</h2>
           </div>
           <div className="topbar-actions user-chip">
@@ -612,7 +735,10 @@ function PrivateDashboard({
 
         {activeView === "activities" && (
           <ActivitiesView
-            activities={operationalData.activities}
+            data={operationalData}
+            onArchiveActivity={onArchiveActivity}
+            onCreateActivity={onCreateActivity}
+            onUpdateActivity={onUpdateActivity}
             profiles={profiles}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
@@ -950,17 +1076,44 @@ function ProfilesView({ data, model, onUpdateProfile, profiles, selectedProfile,
   );
 }
 
-function ActivitiesView({ activities, profiles, statusFilter, setStatusFilter }) {
+function ActivitiesView({
+  data,
+  onArchiveActivity,
+  onCreateActivity,
+  onUpdateActivity,
+  profiles,
+  statusFilter,
+  setStatusFilter,
+}) {
+  const [selectedActivityId, setSelectedActivityId] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const activities = data.activities;
   const visibleActivities = activities.filter(
     (activity) => statusFilter === "all" || activity.status === statusFilter,
   );
+  const selectedActivity =
+    activities.find((activity) => activity.id === selectedActivityId) ?? visibleActivities[0] ?? activities[0];
+
+  useEffect(() => {
+    if (!selectedActivityId && selectedActivity?.id) {
+      setSelectedActivityId(selectedActivity.id);
+    }
+  }, [selectedActivity?.id, selectedActivityId]);
 
   return (
-    <section className="glass-panel backlog-panel">
-      <div className="section-heading">
-        <div>
-          <p className="chrome-label">DASH-07</p>
-          <h3>Actividades</h3>
+    <>
+      <section className="glass-panel backlog-panel">
+        <div className="section-heading">
+          <div>
+            <p className="chrome-label">ACT-01 / ACT-03</p>
+            <h3>Actividades</h3>
+          </div>
+          <div className="section-actions">
+            <button className="ghost-button" onClick={() => setIsCreating((current) => !current)} type="button">
+              {isCreating ? <X size={16} /> : <Activity size={16} />}
+              {isCreating ? "Cerrar" : "Nueva actividad"}
+            </button>
+          </div>
         </div>
         <div className="filter-row compact">
           {statusFilters.map((filter) => (
@@ -974,39 +1127,321 @@ function ActivitiesView({ activities, profiles, statusFilter, setStatusFilter })
             </button>
           ))}
         </div>
-      </div>
 
-      {visibleActivities.length ? (
-        <div className="activity-table">
-          {visibleActivities.map((activity) => (
-            <article className="activity-table-row" key={activity.id}>
-              <div>
-                <h4>{activity.title}</h4>
-                <p>{activity.description || "Sin descripcion."}</p>
-              </div>
-              <div className="activity-profile-stack">
-                {getActivityProfileIds(activity).map((profileId) => {
-                  const profile = profiles.find((item) => item.id === profileId);
-                  return profile ? (
-                    <span className="profile-mini" key={profileId} style={{ "--profile-color": profile.color }}>
-                      {profile.name}
-                    </span>
-                  ) : null;
-                })}
-              </div>
-              <Badge tone={statusTone(activity.status)}>{statusLabel[activity.status] ?? activity.status}</Badge>
-            </article>
-          ))}
-        </div>
+        {isCreating && (
+          <ActivityForm
+            onCancel={() => setIsCreating(false)}
+            onSubmit={async (values) => {
+              const result = await onCreateActivity(values);
+              if (!result.error) {
+                setIsCreating(false);
+                setSelectedActivityId(result.data.id);
+              }
+              return result;
+            }}
+            profiles={profiles}
+          />
+        )}
+
+        {visibleActivities.length ? (
+          <div className="activity-table">
+            {visibleActivities.map((activity) => (
+              <button
+                className={activity.id === selectedActivity?.id ? "activity-table-row is-selected" : "activity-table-row"}
+                key={activity.id}
+                onClick={() => setSelectedActivityId(activity.id)}
+                type="button"
+              >
+                <div>
+                  <h4>{activity.title}</h4>
+                  <p>{activity.description || "Sin descripcion."}</p>
+                </div>
+                <div className="activity-profile-stack">
+                  {renderActivityProfiles(activity, profiles)}
+                </div>
+                <Badge tone={statusTone(activity.status)}>{statusLabel[activity.status] ?? activity.status}</Badge>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            action="Crear actividad"
+            icon={Activity}
+            text="No hay actividades para este filtro. Cambia el filtro o crea una nueva actividad."
+            title="Sin actividades que mostrar"
+          />
+        )}
+      </section>
+
+      {selectedActivity ? (
+        <ActivityDetail
+          activity={selectedActivity}
+          data={data}
+          onArchiveActivity={onArchiveActivity}
+          onUpdateActivity={onUpdateActivity}
+          profiles={profiles}
+          setSelectedActivityId={setSelectedActivityId}
+        />
       ) : (
-        <EmptyState
-          action="Crear actividad"
+        <EmptyPanel
           icon={Activity}
-          text="No hay actividades para este filtro. Cambia el filtro o crea una nueva actividad."
-          title="Sin actividades que mostrar"
+          text="Crea una actividad para ver su detalle operativo."
+          title="Sin detalle de actividad"
         />
       )}
+    </>
+  );
+}
+
+function ActivityDetail({ activity, data, onArchiveActivity, onUpdateActivity, profiles, setSelectedActivityId }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const profileIds = getActivityProfileIds(activity);
+  const schedules = data.scheduleEntries.filter((entry) => entry.activity_id === activity.id);
+  const notes = data.notes.filter((note) => note.activity_id === activity.id);
+  const pendingTasks = data.pendingTasks.filter((task) => task.activity_id === activity.id);
+  const tools = data.tools.filter((tool) => tool.activity_id === activity.id);
+  const topics = data.topics.filter((topic) => topic.activity_id === activity.id);
+  const changes = data.changes.filter((change) => change.entity_id === activity.id).slice(0, 6);
+
+  return (
+    <section className="glass-panel activity-detail-panel">
+      <div className="activity-detail-head">
+        <div>
+          <p className="chrome-label">ACT-04</p>
+          <h3>{activity.title}</h3>
+          <p>{activity.description || "Sin descripcion."}</p>
+        </div>
+        <div className="detail-actions">
+          <Badge tone={statusTone(activity.status)}>{statusLabel[activity.status] ?? activity.status}</Badge>
+          <button className="ghost-button" onClick={() => setIsEditing((current) => !current)} type="button">
+            {isEditing ? <X size={16} /> : <Pencil size={16} />}
+            {isEditing ? "Cerrar" : "Editar"}
+          </button>
+          <ArchiveActivityButton
+            activityId={activity.id}
+            onArchiveActivity={async (activityId) => {
+              const result = await onArchiveActivity(activityId);
+              if (!result.error) setSelectedActivityId("");
+              return result;
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="activity-profile-stack detail-stack">
+        {profileIds.length ? renderActivityProfiles(activity, profiles) : <span className="small-badge">Sin perfiles</span>}
+      </div>
+
+      {isEditing && (
+        <ActivityForm
+          activity={activity}
+          onCancel={() => setIsEditing(false)}
+          onSubmit={async (values) => {
+            const result = await onUpdateActivity(activity.id, values);
+            if (!result.error) setIsEditing(false);
+            return result;
+          }}
+          profiles={profiles}
+        />
+      )}
+
+      <div className="detail-grid">
+        <DetailBucket
+          emptyText="No hay horarios vinculados a esta actividad."
+          icon={CalendarRange}
+          items={schedules.map((entry) => `${formatDate(entry.work_date)} · ${entry.start_time?.slice(0, 5)}-${entry.end_time?.slice(0, 5)} · ${formatHours(entry.total_minutes)}`)}
+          title="Horarios"
+        />
+        <DetailBucket
+          emptyText="No hay notas vinculadas."
+          icon={History}
+          items={notes.map((note) => note.content)}
+          title="Notas"
+        />
+        <DetailBucket
+          emptyText="No hay pendientes vinculados."
+          icon={AlertCircle}
+          items={pendingTasks.map((task) => `${task.title} · ${statusLabel[task.status] ?? task.status}`)}
+          title="Pendientes"
+        />
+        <DetailBucket
+          emptyText="No hay herramientas vinculadas."
+          icon={SlidersHorizontal}
+          items={tools.map((tool) => tool.name)}
+          title="Herramientas"
+        />
+        <DetailBucket
+          emptyText="No hay temas vinculados."
+          icon={Layers3}
+          items={topics.map((topic) => topic.title)}
+          title="Temas"
+        />
+        <DetailBucket
+          emptyText="No hay cambios registrados para esta actividad."
+          icon={History}
+          items={changes.map((change) => `${change.summary} · ${formatDate(change.changed_at)}`)}
+          title="Cambios"
+        />
+      </div>
     </section>
+  );
+}
+
+function ActivityForm({ activity, onCancel, onSubmit, profiles }) {
+  const [form, setForm] = useState(() => toActivityForm(activity, profiles));
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(toActivityForm(activity, profiles));
+  }, [activity, profiles]);
+
+  function toggleProfile(profileId) {
+    setForm((current) => {
+      const nextProfileIds = current.profileIds.includes(profileId)
+        ? current.profileIds.filter((id) => id !== profileId)
+        : [...current.profileIds, profileId];
+
+      return { ...current, profileIds: nextProfileIds };
+    });
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setMessage("");
+
+    const validationError = validateActivityForm(form);
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+
+    setIsSaving(true);
+    const result = await onSubmit(form);
+    setIsSaving(false);
+
+    if (result.error) {
+      setMessage(result.error);
+      return;
+    }
+
+    setMessage("Actividad guardada.");
+  }
+
+  return (
+    <form className="activity-form" onSubmit={handleSubmit}>
+      <div className="form-grid">
+        <label>
+          Titulo
+          <input
+            onChange={(event) => setFormField(setForm, "title", event.target.value)}
+            placeholder="Nuevo bloque de trabajo"
+            value={form.title}
+          />
+        </label>
+        <label>
+          Estado
+          <select
+            onChange={(event) => setFormField(setForm, "status", event.target.value)}
+            value={form.status}
+          >
+            <option value="pending">Pendiente</option>
+            <option value="in_progress">En curso</option>
+            <option value="paused">Pausada</option>
+            <option value="completed">Completada</option>
+          </select>
+        </label>
+      </div>
+      <label>
+        Descripcion
+        <textarea
+          onChange={(event) => setFormField(setForm, "description", event.target.value)}
+          placeholder="Describe de que trata esta actividad"
+          rows="3"
+          value={form.description}
+        />
+      </label>
+      <div className="profile-check-grid">
+        {profiles.map((profile) => (
+          <label className="profile-check" key={profile.id} style={{ "--profile-color": profile.color }}>
+            <input
+              checked={form.profileIds.includes(profile.id)}
+              onChange={() => toggleProfile(profile.id)}
+              type="checkbox"
+            />
+            <span className="profile-dot" />
+            {profile.name}
+          </label>
+        ))}
+      </div>
+      {message && (
+        <p className={message.includes("guardada") ? "form-message is-success" : "form-message is-error"}>
+          {message}
+        </p>
+      )}
+      <div className="form-actions">
+        <button className="primary-button" disabled={isSaving} type="submit">
+          <Save size={16} />
+          {isSaving ? "Guardando..." : activity ? "Guardar actividad" : "Crear actividad"}
+        </button>
+        <button className="ghost-button" onClick={onCancel} type="button">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ArchiveActivityButton({ activityId, onArchiveActivity }) {
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function handleArchive() {
+    if (!isConfirming) {
+      setIsConfirming(true);
+      return;
+    }
+
+    setIsDeleting(true);
+    const result = await onArchiveActivity(activityId);
+    setIsDeleting(false);
+
+    if (result.error) {
+      setMessage(result.error);
+      setIsConfirming(false);
+    }
+  }
+
+  return (
+    <div className="archive-action">
+      <button className={isConfirming ? "danger-button is-confirming" : "danger-button"} onClick={handleArchive} type="button">
+        <Trash2 size={16} />
+        {isDeleting ? "Eliminando..." : isConfirming ? "Confirmar" : "Eliminar"}
+      </button>
+      {isConfirming && (
+        <button className="ghost-button compact-button" onClick={() => setIsConfirming(false)} type="button">
+          Cancelar
+        </button>
+      )}
+      {message && <p className="form-message is-error">{message}</p>}
+    </div>
+  );
+}
+
+function DetailBucket({ emptyText, icon: Icon, items, title }) {
+  return (
+    <article className="detail-bucket">
+      <div className="detail-bucket-head">
+        <Icon size={17} />
+        <strong>{title}</strong>
+      </div>
+      {items.length ? (
+        items.slice(0, 6).map((item) => <span key={`${title}-${item}`}>{item}</span>)
+      ) : (
+        <p>{emptyText}</p>
+      )}
+    </article>
   );
 }
 
@@ -1317,6 +1752,17 @@ function getActivityProfileIds(activity) {
     .filter(Boolean);
 }
 
+function renderActivityProfiles(activity, profiles) {
+  return getActivityProfileIds(activity).map((profileId) => {
+    const profile = profiles.find((item) => item.id === profileId);
+    return profile ? (
+      <span className="profile-mini" key={profileId} style={{ "--profile-color": profile.color }}>
+        {profile.name}
+      </span>
+    ) : null;
+  });
+}
+
 function sumMinutes(entries) {
   return entries.reduce((total, entry) => total + (Number(entry.total_minutes) || 0), 0);
 }
@@ -1363,6 +1809,15 @@ function toProfileForm(profile) {
   };
 }
 
+function toActivityForm(activity, profiles) {
+  return {
+    description: activity?.description || "",
+    profileIds: activity ? getActivityProfileIds(activity) : profiles.map((profile) => profile.id).slice(0, 1),
+    status: activity?.status === "archived" ? "pending" : activity?.status || "pending",
+    title: activity?.title || "",
+  };
+}
+
 function setFormField(setForm, field, value) {
   setForm((current) => ({ ...current, [field]: value }));
 }
@@ -1394,7 +1849,7 @@ function readableAuthError(message) {
 
 function readableDatabaseError(message) {
   if (message.toLowerCase().includes("visible_role")) {
-    return "Falta aplicar la migracion de Sprint 2.";
+    return "Falta aplicar las migraciones pendientes.";
   }
 
   return "No se han podido guardar los cambios.";
