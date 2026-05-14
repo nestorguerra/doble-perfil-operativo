@@ -79,6 +79,11 @@ const initialAuthForm = {
   confirmPassword: "",
 };
 
+const DEMO_EMAIL = "demo@dobleperfil.app";
+const DEMO_PASSWORD = "Demo1234!";
+const DEMO_STORAGE_KEY = "doble-perfil-demo-state";
+const DEMO_USER_ID = "99999999-9999-4999-8999-999999999999";
+
 const emptyOperationalData = {
   activities: [],
   notes: [],
@@ -177,6 +182,7 @@ function App() {
   const [syncState, setSyncState] = useState(
     hasSupabaseConfig ? "Comprobando sesion segura..." : "Falta conectar Supabase",
   );
+  const isDemoMode = isDemoSession(session);
 
   useEffect(() => {
     if (!supabase) return;
@@ -213,6 +219,15 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (isDemoSession(session)) {
+      const demoState = loadDemoState();
+      setCurrentUserProfile(demoState.currentUserProfile);
+      setProfiles(demoState.profiles);
+      setOperationalData(demoState.operationalData);
+      setSyncState("Modo demo local activo");
+      return;
+    }
+
     if (!supabase || !session) {
       setCurrentUserProfile(null);
       setProfiles(profileSeed);
@@ -354,9 +369,29 @@ function App() {
     };
   }, [session]);
 
+  function persistDemoSnapshot(nextProfiles, nextOperationalData, nextUserProfile = currentUserProfile) {
+    if (!isDemoSession(session)) return;
+    saveDemoState({
+      currentUserProfile: nextUserProfile,
+      operationalData: nextOperationalData,
+      profiles: nextProfiles,
+    });
+  }
+
+  function handleDemoLogin() {
+    const demoState = loadDemoState();
+    setSession(createDemoSession());
+    setCurrentUserProfile(demoState.currentUserProfile);
+    setProfiles(demoState.profiles);
+    setOperationalData(demoState.operationalData);
+    setAuthStatus("authenticated");
+    setSyncState("Modo demo local activo");
+  }
+
   async function handleSignOut() {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    if (supabase && !isDemoMode) {
+      await supabase.auth.signOut();
+    }
     setSession(null);
     setCurrentUserProfile(null);
     setProfiles(profileSeed);
@@ -367,7 +402,7 @@ function App() {
   }
 
   async function handleUpdateProfile(profileId, values) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -381,6 +416,14 @@ function App() {
       color: values.color,
       visible_role: values.visible_role.trim(),
     };
+
+    if (isDemoMode) {
+      const data = { ...currentProfile, ...payload, updated_at: nowIso() };
+      const nextProfiles = profiles.map((profile) => (profile.id === profileId ? data : profile));
+      setProfiles(nextProfiles);
+      persistDemoSnapshot(nextProfiles, operationalData);
+      return { data };
+    }
 
     const { data, error } = await supabase
       .from("profiles")
@@ -399,7 +442,7 @@ function App() {
   }
 
   async function handleUpdateCurrentUser(values) {
-    if (!supabase || !session) {
+    if ((!supabase && !isDemoMode) || !session) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -414,6 +457,20 @@ function App() {
         density: values.density,
       },
     };
+
+    if (isDemoMode) {
+      const data = { ...currentUserProfile, ...payload, updated_at: nowIso() };
+      const nextOperationalData = {
+        ...operationalData,
+        userProfiles: operationalData.userProfiles.map((profile) =>
+          profile.id === session.user.id ? { ...profile, ...data } : profile,
+        ),
+      };
+      setCurrentUserProfile(data);
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData, data);
+      return { data };
+    }
 
     const { data, error } = await supabase
       .from("user_profiles")
@@ -435,7 +492,7 @@ function App() {
   }
 
   async function handleCreateActivity(values) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -443,6 +500,41 @@ function App() {
     if (validationError) return { error: validationError };
 
     const normalized = normalizeActivityForm(values);
+
+    if (isDemoMode) {
+      const createdActivity = {
+        created_at: nowIso(),
+        description: normalized.description,
+        id: newDemoId("activity"),
+        status: normalized.status,
+        title: normalized.title,
+        updated_at: nowIso(),
+      };
+      const links = normalized.profileIds.map((profileId) => ({
+        activity_id: createdActivity.id,
+        profile_id: profileId,
+      }));
+      const hydratedActivity = {
+        ...createdActivity,
+        activity_profiles: links.map((link) => ({ profile_id: link.profile_id })),
+      };
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          activities: [hydratedActivity, ...operationalData.activities],
+        },
+        "activities",
+        createdActivity.id,
+        "insert",
+        `Actividad creada: ${createdActivity.title}`,
+        null,
+        hydratedActivity,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data: hydratedActivity };
+    }
+
     const { data: createdActivity, error: activityError } = await supabase
       .from("activities")
       .insert({
@@ -477,7 +569,7 @@ function App() {
   }
 
   async function handleDuplicateActivity(activityId) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -493,7 +585,7 @@ function App() {
   }
 
   async function handleUpdateActivity(activityId, values) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -505,6 +597,42 @@ function App() {
     if (conflictError) return { error: conflictError };
 
     const normalized = normalizeActivityForm(values);
+
+    if (isDemoMode) {
+      const updatedActivity = {
+        ...currentActivity,
+        description: normalized.description,
+        status: normalized.status,
+        title: normalized.title,
+        updated_at: nowIso(),
+      };
+      const links = normalized.profileIds.map((profileId) => ({
+        activity_id: activityId,
+        profile_id: profileId,
+      }));
+      const hydratedActivity = {
+        ...updatedActivity,
+        activity_profiles: links.map((link) => ({ profile_id: link.profile_id })),
+      };
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          activities: operationalData.activities.map((activity) =>
+            activity.id === activityId ? hydratedActivity : activity,
+          ),
+        },
+        "activities",
+        activityId,
+        "update",
+        `Actividad actualizada: ${hydratedActivity.title}`,
+        currentActivity,
+        hydratedActivity,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data: hydratedActivity };
+    }
+
     const { data: updatedActivity, error: activityError } = await supabase
       .from("activities")
       .update({
@@ -549,8 +677,27 @@ function App() {
   }
 
   async function handleArchiveActivity(activityId) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
+    }
+
+    if (isDemoMode) {
+      const activity = operationalData.activities.find((item) => item.id === activityId);
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          activities: operationalData.activities.filter((item) => item.id !== activityId),
+        },
+        "activities",
+        activityId,
+        "delete",
+        `Actividad archivada: ${activity?.title ?? "Actividad"}`,
+        activity,
+        { ...activity, status: "archived" },
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data: true };
     }
 
     const { error } = await supabase
@@ -569,7 +716,7 @@ function App() {
   }
 
   async function handleCreateScheduleEntry(values) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -577,6 +724,32 @@ function App() {
     if (validationError) return { error: validationError };
 
     const payload = normalizeScheduleForm(values);
+
+    if (isDemoMode) {
+      const data = {
+        ...payload,
+        created_at: nowIso(),
+        id: newDemoId("schedule"),
+        total_minutes: calculateMinutes(values.startTime, values.endTime),
+        updated_at: nowIso(),
+      };
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          scheduleEntries: [data, ...operationalData.scheduleEntries],
+        },
+        "schedule_entries",
+        data.id,
+        "insert",
+        `Horario creado: ${formatDate(data.work_date)}`,
+        null,
+        data,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data };
+    }
+
     const { data, error } = await supabase
       .from("schedule_entries")
       .insert(payload)
@@ -594,7 +767,7 @@ function App() {
   }
 
   async function handleUpdateScheduleEntry(entryId, values) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -606,6 +779,31 @@ function App() {
     if (conflictError) return { error: conflictError };
 
     const payload = normalizeScheduleForm(values);
+
+    if (isDemoMode) {
+      const data = {
+        ...currentEntry,
+        ...payload,
+        total_minutes: calculateMinutes(values.startTime, values.endTime),
+        updated_at: nowIso(),
+      };
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          scheduleEntries: operationalData.scheduleEntries.map((entry) => (entry.id === entryId ? data : entry)),
+        },
+        "schedule_entries",
+        entryId,
+        "update",
+        `Horario actualizado: ${formatDate(data.work_date)}`,
+        currentEntry,
+        data,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data };
+    }
+
     const { data, error } = await supabase
       .from("schedule_entries")
       .update(payload)
@@ -624,8 +822,27 @@ function App() {
   }
 
   async function handleDeleteScheduleEntry(entryId) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
+    }
+
+    if (isDemoMode) {
+      const entry = operationalData.scheduleEntries.find((item) => item.id === entryId);
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          scheduleEntries: operationalData.scheduleEntries.filter((item) => item.id !== entryId),
+        },
+        "schedule_entries",
+        entryId,
+        "delete",
+        `Horario eliminado: ${formatDate(entry?.work_date)}`,
+        entry,
+        null,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data: true };
     }
 
     const { error } = await supabase.from("schedule_entries").delete().eq("id", entryId);
@@ -641,7 +858,7 @@ function App() {
   }
 
   async function handleCreateWorkItem(kind, values) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -650,6 +867,34 @@ function App() {
 
     const table = workItemTable(kind);
     const payload = normalizeWorkItemForm(kind, values);
+
+    if (isDemoMode) {
+      const data = {
+        ...payload,
+        created_at: nowIso(),
+        created_by: DEMO_USER_ID,
+        id: newDemoId(kind),
+        updated_at: nowIso(),
+        updated_by: DEMO_USER_ID,
+      };
+      const stateKey = workItemStateKey(kind);
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          [stateKey]: [data, ...operationalData[stateKey]],
+        },
+        table,
+        data.id,
+        "insert",
+        `${entityLabel(table)} creado: ${workItemTitle(kind, data)}`,
+        null,
+        data,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data };
+    }
+
     const { data, error } = await supabase
       .from(table)
       .insert(payload)
@@ -667,7 +912,7 @@ function App() {
   }
 
   async function handleUpdateWorkItem(kind, itemId, values) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
     }
 
@@ -680,6 +925,32 @@ function App() {
 
     const table = workItemTable(kind);
     const payload = normalizeWorkItemForm(kind, values);
+
+    if (isDemoMode) {
+      const stateKey = workItemStateKey(kind);
+      const data = {
+        ...currentItem,
+        ...payload,
+        updated_at: nowIso(),
+        updated_by: DEMO_USER_ID,
+      };
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          [stateKey]: operationalData[stateKey].map((item) => (item.id === itemId ? data : item)),
+        },
+        table,
+        itemId,
+        "update",
+        `${entityLabel(table)} actualizado: ${workItemTitle(kind, data)}`,
+        currentItem,
+        data,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data };
+    }
+
     const { data, error } = await supabase
       .from(table)
       .update(payload)
@@ -700,8 +971,29 @@ function App() {
   }
 
   async function handleDeleteWorkItem(kind, itemId) {
-    if (!supabase) {
+    if (!supabase && !isDemoMode) {
       return { error: "Supabase no esta configurado." };
+    }
+
+    if (isDemoMode) {
+      const table = workItemTable(kind);
+      const stateKey = workItemStateKey(kind);
+      const item = operationalData[stateKey].find((entry) => entry.id === itemId);
+      const nextOperationalData = appendDemoChange(
+        {
+          ...operationalData,
+          [stateKey]: operationalData[stateKey].filter((entry) => entry.id !== itemId),
+        },
+        table,
+        itemId,
+        "delete",
+        `${entityLabel(table)} eliminado: ${item ? workItemTitle(kind, item) : "item"}`,
+        item,
+        null,
+      );
+      setOperationalData(nextOperationalData);
+      persistDemoSnapshot(profiles, nextOperationalData);
+      return { data: true };
     }
 
     const { error } = await supabase.from(workItemTable(kind)).delete().eq("id", itemId);
@@ -749,7 +1041,7 @@ function App() {
   }
 
   if (!session) {
-    return <AuthScreen syncState={syncState} />;
+    return <AuthScreen onDemoLogin={handleDemoLogin} syncState={syncState} />;
   }
 
   if (requiresPasswordReset) {
@@ -782,7 +1074,7 @@ function App() {
   );
 }
 
-function AuthScreen({ syncState }) {
+function AuthScreen({ onDemoLogin, syncState }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState(initialAuthForm);
   const [status, setStatus] = useState("");
@@ -815,7 +1107,23 @@ function AuthScreen({ syncState }) {
     }
 
     if (!supabase) {
-      setError("Conecta Supabase en .env para activar login real.");
+      if (!isRegisterMode && !isRecoverMode && normalizeEmail(form.email) === DEMO_EMAIL && form.password === DEMO_PASSWORD) {
+        setStatus("Entrando en modo demo...");
+        onDemoLogin();
+        return;
+      }
+
+      if (isRegisterMode) {
+        setError("El registro real necesita Supabase. Usa el acceso demo para entrar ahora.");
+        return;
+      }
+
+      if (isRecoverMode) {
+        setError("La recuperacion real necesita Supabase. Usa el acceso demo para probar la app.");
+        return;
+      }
+
+      setError(`Usa el acceso demo: ${DEMO_EMAIL} / ${DEMO_PASSWORD}`);
       return;
     }
 
@@ -992,6 +1300,11 @@ function AuthScreen({ syncState }) {
           {isRegisterMode && !isRegistrationEnabled && hasSupabaseConfig && (
             <p className="form-message is-info">
               Registro controlado cerrado por configuracion.
+            </p>
+          )}
+          {!hasSupabaseConfig && (
+            <p className="form-message is-success">
+              Acceso demo: {DEMO_EMAIL} / {DEMO_PASSWORD}
             </p>
           )}
 
@@ -3998,6 +4311,182 @@ function detectConflict(expectedUpdatedAt, currentUpdatedAt) {
   if (!expectedUpdatedAt || !currentUpdatedAt) return "";
   if (expectedUpdatedAt === currentUpdatedAt) return "";
   return "Este dato cambio en otra sesion. Revisa la version actual antes de guardar.";
+}
+
+function createDemoSession() {
+  return {
+    user: {
+      email: DEMO_EMAIL,
+      id: DEMO_USER_ID,
+    },
+  };
+}
+
+function isDemoSession(activeSession) {
+  return activeSession?.user?.id === DEMO_USER_ID;
+}
+
+function loadDemoState() {
+  try {
+    const storedState = window.localStorage.getItem(DEMO_STORAGE_KEY);
+    if (storedState) return JSON.parse(storedState);
+  } catch {
+    window.localStorage.removeItem(DEMO_STORAGE_KEY);
+  }
+
+  const demoState = createInitialDemoState();
+  saveDemoState(demoState);
+  return demoState;
+}
+
+function saveDemoState(state) {
+  window.localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(state));
+}
+
+function createInitialDemoState() {
+  const createdAt = nowIso();
+  const today = new Date().toISOString().slice(0, 10);
+  const activityId = "demo-activity-main";
+  const noteId = "demo-note-main";
+  const profileA = profileSeed[0].id;
+  const profileB = profileSeed[1].id;
+  const currentUserProfile = {
+    created_at: createdAt,
+    display_name: "Demo Doble Perfil",
+    id: DEMO_USER_ID,
+    preferences: { density: "comfortable" },
+    role: "admin",
+    updated_at: createdAt,
+  };
+  const activity = {
+    activity_profiles: [{ profile_id: profileA }, { profile_id: profileB }],
+    created_at: createdAt,
+    description: "Actividad demo para probar perfiles, horarios, notas, pendientes, herramientas y mapa.",
+    id: activityId,
+    status: "in_progress",
+    title: "Actividad demo inicial",
+    updated_at: createdAt,
+  };
+
+  return {
+    currentUserProfile,
+    operationalData: {
+      activities: [activity],
+      changes: [
+        {
+          after_data: activity,
+          before_data: null,
+          changed_at: createdAt,
+          changed_by: DEMO_USER_ID,
+          change_type: "insert",
+          entity_id: activityId,
+          entity_type: "activities",
+          id: "demo-change-main",
+          summary: "Actividad creada: Actividad demo inicial",
+        },
+      ],
+      notes: [
+        {
+          activity_id: activityId,
+          content: "Nota destacada de ejemplo. Puedes editarla, quitar el destacado o crear nuevas notas.",
+          created_at: createdAt,
+          created_by: DEMO_USER_ID,
+          id: noteId,
+          is_pinned: true,
+          profile_id: profileA,
+          updated_at: createdAt,
+          updated_by: DEMO_USER_ID,
+        },
+      ],
+      pendingTasks: [
+        {
+          activity_id: activityId,
+          created_at: createdAt,
+          created_by: DEMO_USER_ID,
+          due_date: today,
+          id: "demo-task-main",
+          priority: "high",
+          profile_id: profileB,
+          status: "open",
+          title: "Probar el flujo completo",
+          updated_at: createdAt,
+          updated_by: DEMO_USER_ID,
+        },
+      ],
+      scheduleEntries: [
+        {
+          activity_id: activityId,
+          created_at: createdAt,
+          end_time: "11:30",
+          id: "demo-schedule-main",
+          notes: "Bloque demo inicial",
+          profile_id: profileA,
+          start_time: "09:00",
+          total_minutes: 150,
+          updated_at: createdAt,
+          work_date: today,
+        },
+      ],
+      tools: [
+        {
+          activity_id: activityId,
+          created_at: createdAt,
+          created_by: DEMO_USER_ID,
+          description: "Herramienta reutilizable de prueba.",
+          id: "demo-tool-main",
+          name: "Supabase",
+          profile_id: profileA,
+          updated_at: createdAt,
+          updated_by: DEMO_USER_ID,
+        },
+      ],
+      topics: [
+        {
+          activity_id: activityId,
+          created_at: createdAt,
+          created_by: DEMO_USER_ID,
+          description: "Tema trabajado de ejemplo.",
+          id: "demo-topic-main",
+          profile_id: profileB,
+          tags: ["demo", "producto"],
+          title: "Validacion operativa",
+          updated_at: createdAt,
+          updated_by: DEMO_USER_ID,
+        },
+      ],
+      userProfiles: [currentUserProfile],
+    },
+    profiles: profileSeed.map((profile) => ({ ...profile, updated_at: createdAt })),
+  };
+}
+
+function appendDemoChange(data, entityType, entityId, changeType, summary, beforeData, afterData) {
+  return {
+    ...data,
+    changes: [
+      {
+        after_data: afterData,
+        before_data: beforeData,
+        changed_at: nowIso(),
+        changed_by: DEMO_USER_ID,
+        change_type: changeType,
+        entity_id: entityId,
+        entity_type: entityType,
+        id: newDemoId("change"),
+        summary,
+      },
+      ...data.changes,
+    ].slice(0, 80),
+  };
+}
+
+function newDemoId(prefix) {
+  if (window.crypto?.randomUUID) return `${prefix}-${window.crypto.randomUUID()}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function nowIso() {
+  return new Date().toISOString();
 }
 
 function viewTitle(activeView, selectedProfile) {

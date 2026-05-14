@@ -64,6 +64,17 @@ VITE_AUTH_REGISTRATION_ENABLED=true
 
 Sin las variables de Supabase, la app muestra la pantalla de acceso bloqueada para no exponer el dashboard. Con variables reales, activa login y carga los datos privados desde Supabase.
 
+## Acceso demo temporal
+
+Mientras Supabase de produccion no este conectado, la app permite entrar en modo demo con persistencia local en el navegador:
+
+```text
+Email: demo@dobleperfil.app
+Password: Demo1234!
+```
+
+Este modo sirve para probar el producto publicado. No sustituye la base de datos real ni la sincronizacion multiusuario de Supabase.
+
 Para GitHub Pages, configura en el repositorio:
 
 - Variable `VITE_SUPABASE_URL`.
