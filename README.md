@@ -46,6 +46,12 @@ VITE_AUTH_REGISTRATION_ENABLED=true
 
 Sin las variables de Supabase, la app muestra la pantalla de acceso bloqueada para no exponer el dashboard. Con variables reales, activa login y carga los datos privados desde Supabase.
 
+Para GitHub Pages, configura en el repositorio:
+
+- Variable `VITE_SUPABASE_URL`.
+- Secret `VITE_SUPABASE_ANON_KEY`.
+- Variable opcional `VITE_AUTH_REGISTRATION_ENABLED`.
+
 ## Comandos utiles
 
 ```bash
