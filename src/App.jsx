@@ -1,29 +1,83 @@
 import {
   Activity,
-  CalendarDays,
   CheckCircle2,
   Clock3,
   Database,
   GitBranch,
   Layers3,
   LockKeyhole,
+  LogOut,
   Map,
-  NotebookPen,
   Settings2,
   ShieldCheck,
-  Sparkles,
   UserRound,
-  Wrench,
+  UserRoundPlus,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { hasSupabaseConfig, supabase } from "./lib/supabase";
-import { profileSeed, sampleActivity, technicalItems } from "./lib/seed";
+import {
+  normalizeEmail,
+  validateLoginForm,
+  validateRegistrationForm,
+} from "./lib/authValidation";
+import { hasSupabaseConfig, isRegistrationEnabled, supabase } from "./lib/supabase";
+import { profileSeed, sampleActivity } from "./lib/seed";
 
 const navItems = [
-  { label: "Fundacion", icon: Layers3 },
+  { label: "Dashboard", icon: Layers3 },
   { label: "Datos", icon: Database },
-  { label: "UI", icon: Sparkles },
+  { label: "Seguridad", icon: ShieldCheck },
   { label: "Staging", icon: GitBranch },
+];
+
+const authItems = [
+  {
+    code: "AUTH-01",
+    title: "Pantalla de login",
+    status: "Funcional",
+    detail: "Formulario con email, contrasena, validacion, carga y errores comprensibles.",
+  },
+  {
+    code: "AUTH-02",
+    title: "Registro controlado",
+    status: "Configurable",
+    detail: "Alta con Supabase Auth cuando VITE_AUTH_REGISTRATION_ENABLED esta activo.",
+  },
+  {
+    code: "AUTH-04",
+    title: "Sesion persistente",
+    status: "Funcional",
+    detail: "La app lee la sesion al cargar y escucha cambios de Supabase Auth.",
+  },
+  {
+    code: "AUTH-05",
+    title: "Logout",
+    status: "Funcional",
+    detail: "Cierre de sesion visible en cabecera y limpieza de estado local.",
+  },
+  {
+    code: "AUTH-06",
+    title: "Rutas privadas",
+    status: "Protegidas",
+    detail: "El dashboard no se renderiza hasta confirmar una sesion autenticada.",
+  },
+  {
+    code: "AUTH-07",
+    title: "RLS",
+    status: "Migracion",
+    detail: "Politicas para bloquear anonimos y permitir lectura/escritura autenticada.",
+  },
+  {
+    code: "ADMIN-03",
+    title: "Roles simples",
+    status: "user/admin",
+    detail: "Rol guardado en user_profiles y disponible para condicionar acciones sensibles.",
+  },
+  {
+    code: "QA-02 / QA-06",
+    title: "Pruebas",
+    status: "Documentadas",
+    detail: "Matriz de login, sesion, logout y permisos anonimo/autenticado.",
+  },
 ];
 
 const mapSlots = [
@@ -35,64 +89,112 @@ const mapSlots = [
 ];
 
 const statusStyles = {
-  "Base preparada": "blue",
-  "SQL + seed": "green",
-  "Modelo listo": "cyan",
-  "Auditoria base": "amber",
-  Incluidos: "green",
-  Constraints: "rose",
-  "Base creada": "blue",
+  Funcional: "green",
+  Configurable: "blue",
+  Protegidas: "rose",
+  Migracion: "amber",
+  "user/admin": "cyan",
+  Documentadas: "green",
+};
+
+const initialAuthForm = {
+  displayName: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
 };
 
 function App() {
+  const [authStatus, setAuthStatus] = useState(hasSupabaseConfig ? "loading" : "unauthenticated");
+  const [session, setSession] = useState(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [profiles, setProfiles] = useState(profileSeed);
-  const [sessionEmail, setSessionEmail] = useState("");
   const [syncState, setSyncState] = useState(
-    hasSupabaseConfig ? "Conectando con Supabase..." : "Modo local hasta conectar Supabase",
+    hasSupabaseConfig ? "Comprobando sesion segura..." : "Falta conectar Supabase",
   );
 
   useEffect(() => {
     if (!supabase) return;
 
-    let ignore = false;
+    let active = true;
 
-    async function loadInitialState() {
+    async function resolveSession() {
       const {
-        data: { session },
+        data: { session: activeSession },
       } = await supabase.auth.getSession();
 
-      if (!ignore && session?.user?.email) {
-        setSessionEmail(session.user.email);
-      }
+      if (!active) return;
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id,name,description,color,display_order,is_active")
-        .order("display_order", { ascending: true });
+      setSession(activeSession);
+      setAuthStatus(activeSession ? "authenticated" : "unauthenticated");
+    }
+
+    resolveSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthStatus(nextSession ? "authenticated" : "unauthenticated");
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !session) {
+      setCurrentUserProfile(null);
+      setProfiles(profileSeed);
+      if (!hasSupabaseConfig) setSyncState("Falta conectar Supabase");
+      return;
+    }
+
+    let ignore = false;
+
+    async function loadPrivateState() {
+      setSyncState("Sincronizando datos privados...");
+
+      const [profileResult, currentUserResult] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id,name,description,color,display_order,is_active")
+          .order("display_order", { ascending: true }),
+        supabase
+          .from("user_profiles")
+          .select("id,display_name,role")
+          .eq("id", session.user.id)
+          .maybeSingle(),
+      ]);
 
       if (ignore) return;
 
-      if (error) {
-        setSyncState("Supabase configurado, falta aplicar la migracion SQL");
+      if (profileResult.error || currentUserResult.error) {
+        setSyncState("Supabase conectado, falta aplicar migraciones");
         return;
       }
 
-      if (data?.length) {
-        setProfiles(data);
-        setSyncState("Sincronizado con Supabase");
-      } else {
-        setSyncState("Supabase listo, pendiente de seed de perfiles");
+      if (profileResult.data?.length) {
+        setProfiles(profileResult.data);
       }
+
+      if (currentUserResult.data) {
+        setCurrentUserProfile(currentUserResult.data);
+      }
+
+      setSyncState("Sesion activa y datos protegidos");
     }
 
-    loadInitialState();
+    loadPrivateState();
 
     const channel = supabase
-      .channel("profiles-realtime")
+      .channel("private-dashboard-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "profiles" },
-        () => loadInitialState(),
+        () => loadPrivateState(),
       )
       .subscribe();
 
@@ -100,12 +202,238 @@ function App() {
       ignore = true;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [session]);
 
-  const completedItems = useMemo(
-    () => technicalItems.filter((item) => item.status !== "Pendiente").length,
-    [],
+  async function handleSignOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setSession(null);
+    setCurrentUserProfile(null);
+    setProfiles(profileSeed);
+    setAuthStatus("unauthenticated");
+    setSyncState("Sesion cerrada");
+  }
+
+  if (authStatus === "loading") {
+    return <LoadingScreen />;
+  }
+
+  if (!session) {
+    return <AuthScreen syncState={syncState} />;
+  }
+
+  return (
+    <PrivateDashboard
+      currentUserProfile={currentUserProfile}
+      onSignOut={handleSignOut}
+      profiles={profiles}
+      session={session}
+      syncState={syncState}
+    />
   );
+}
+
+function AuthScreen({ syncState }) {
+  const [mode, setMode] = useState("login");
+  const [form, setForm] = useState(initialAuthForm);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isRegisterMode = mode === "register";
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+
+    const validationError = isRegisterMode
+      ? validateRegistrationForm(form)
+      : validateLoginForm(form);
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    if (!supabase) {
+      setError("Conecta Supabase en .env para activar login real.");
+      return;
+    }
+
+    if (isRegisterMode && !isRegistrationEnabled) {
+      setError("El registro esta cerrado. Activalo solo cuando quieras crear accesos.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const email = normalizeEmail(form.email);
+    const result = isRegisterMode
+      ? await supabase.auth.signUp({
+          email,
+          password: form.password,
+          options: {
+            data: {
+              display_name: form.displayName.trim(),
+            },
+          },
+        })
+      : await supabase.auth.signInWithPassword({
+          email,
+          password: form.password,
+        });
+
+    setIsSubmitting(false);
+
+    if (result.error) {
+      setError(readableAuthError(result.error.message));
+      return;
+    }
+
+    if (isRegisterMode) {
+      setStatus("Usuario creado. Si Supabase pide confirmacion, revisa el email antes de entrar.");
+      setMode("login");
+      setForm((current) => ({ ...current, password: "", confirmPassword: "" }));
+      return;
+    }
+
+    setStatus("Entrando...");
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-hero glass-panel">
+        <div className="brand-block">
+          <div className="brand-mark">
+            <Map size={22} />
+          </div>
+          <div>
+            <p className="chrome-label">Sprint 1</p>
+            <h1>Doble Perfil</h1>
+          </div>
+        </div>
+        <div className="auth-copy">
+          <p className="chrome-label">Login y base segura</p>
+          <h2>Acceso protegido antes de mostrar datos privados</h2>
+          <p>
+            El dashboard queda bloqueado hasta que Supabase confirme una sesion valida. La sesion
+            persiste al recargar y los datos operativos se leen solo con usuario autenticado.
+          </p>
+        </div>
+        <div className="auth-security-grid">
+          <SecurityPoint icon={LockKeyhole} title="Auth real" body="Email y contrasena gestionados por Supabase." />
+          <SecurityPoint icon={ShieldCheck} title="RLS" body="Anonimos bloqueados en tablas privadas." />
+          <SecurityPoint icon={UserRoundPlus} title="Roles" body="Base user/admin preparada para administracion." />
+        </div>
+      </section>
+
+      <section className="auth-panel glass-panel">
+        <div className="auth-panel-head">
+          <div>
+            <p className="chrome-label">Acceso</p>
+            <h2>{isRegisterMode ? "Crear usuario" : "Entrar"}</h2>
+          </div>
+          <span className={hasSupabaseConfig ? "small-badge green" : "small-badge amber"}>
+            {hasSupabaseConfig ? "Supabase listo" : "Config pendiente"}
+          </span>
+        </div>
+
+        <div className="segmented-control" role="tablist" aria-label="Modo de autenticacion">
+          <button
+            aria-selected={!isRegisterMode}
+            className={!isRegisterMode ? "is-selected" : ""}
+            onClick={() => setMode("login")}
+            type="button"
+          >
+            Login
+          </button>
+          <button
+            aria-selected={isRegisterMode}
+            className={isRegisterMode ? "is-selected" : ""}
+            onClick={() => setMode("register")}
+            type="button"
+          >
+            Registro
+          </button>
+        </div>
+
+        <form className="auth-form" onSubmit={handleSubmit}>
+          {isRegisterMode && (
+            <label>
+              Nombre visible
+              <input
+                autoComplete="name"
+                onChange={(event) => updateField("displayName", event.target.value)}
+                placeholder="Nombre del usuario"
+                value={form.displayName}
+              />
+            </label>
+          )}
+          <label>
+            Email
+            <input
+              autoComplete="email"
+              inputMode="email"
+              onChange={(event) => updateField("email", event.target.value)}
+              placeholder="usuario@empresa.com"
+              type="email"
+              value={form.email}
+            />
+          </label>
+          <label>
+            Contrasena
+            <input
+              autoComplete={isRegisterMode ? "new-password" : "current-password"}
+              onChange={(event) => updateField("password", event.target.value)}
+              placeholder="Minimo 8 caracteres"
+              type="password"
+              value={form.password}
+            />
+          </label>
+          {isRegisterMode && (
+            <label>
+              Confirmar contrasena
+              <input
+                autoComplete="new-password"
+                onChange={(event) => updateField("confirmPassword", event.target.value)}
+                placeholder="Repite la contrasena"
+                type="password"
+                value={form.confirmPassword}
+              />
+            </label>
+          )}
+
+          {error && <p className="form-message is-error">{error}</p>}
+          {status && <p className="form-message is-success">{status}</p>}
+          {!hasSupabaseConfig && (
+            <p className="form-message is-info">
+              {syncState}. Rellena las variables de entorno para activar autenticacion real.
+            </p>
+          )}
+          {isRegisterMode && !isRegistrationEnabled && hasSupabaseConfig && (
+            <p className="form-message is-info">
+              Registro controlado cerrado por configuracion.
+            </p>
+          )}
+
+          <button className="primary-button" disabled={isSubmitting} type="submit">
+            {isSubmitting ? "Procesando..." : isRegisterMode ? "Crear acceso" : "Entrar al dashboard"}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function PrivateDashboard({ currentUserProfile, onSignOut, profiles, session, syncState }) {
+  const completedItems = useMemo(() => authItems.length, []);
+  const role = currentUserProfile?.role ?? "user";
+  const displayName = currentUserProfile?.display_name || session.user.email;
 
   return (
     <main className="app-shell">
@@ -115,7 +443,7 @@ function App() {
             <Map size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 0</p>
+            <p className="chrome-label">Sprint 1</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -141,12 +469,18 @@ function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="chrome-label">Fundacion tecnica</p>
-            <h2>Base lista para desarrollar sin rehacer estructura</h2>
+            <p className="chrome-label">Login y base segura</p>
+            <h2>Dashboard privado con sesion persistente</h2>
           </div>
-          <div className="topbar-actions">
-            <span className={hasSupabaseConfig ? "status-dot is-online" : "status-dot"} />
-            <span>{hasSupabaseConfig ? "Backend conectado" : "Backend pendiente"}</span>
+          <div className="topbar-actions user-chip">
+            <span className="status-dot is-online" />
+            <div>
+              <strong>{displayName}</strong>
+              <span>{role === "admin" ? "Administrador" : "Usuario"}</span>
+            </div>
+            <button className="icon-button" onClick={onSignOut} title="Cerrar sesion" type="button">
+              <LogOut size={17} />
+            </button>
           </div>
         </header>
 
@@ -154,34 +488,34 @@ function App() {
           <article className="summary-panel glass-panel">
             <div className="summary-copy">
               <p className="chrome-label">Gate de salida</p>
-              <h3>Repositorio, modelo de datos y sistema visual preparados</h3>
+              <h3>Usuario real puede entrar, recargar y cerrar sesion</h3>
               <p>
-                Esta primera version deja montada la estructura tecnica: frontend ejecutable,
-                Supabase documentado, migracion SQL, seed de perfiles, RLS, indices y base visual.
+                La informacion privada solo se monta despues de validar la sesion. El frontend ya
+                consume el rol desde `user_profiles` y deja acciones admin preparadas.
               </p>
             </div>
             <div className="metrics-row">
-              <Metric label="Items Sprint 0" value={technicalItems.length} icon={CheckCircle2} />
+              <Metric label="Items Sprint 1" value={authItems.length} icon={CheckCircle2} />
               <Metric label="Cubiertos" value={completedItems} icon={Activity} />
-              <Metric label="Perfiles" value={profiles.length} icon={UserRound} />
+              <Metric label="Rol activo" value={role} icon={UserRound} />
             </div>
           </article>
 
           <article className="login-card glass-panel">
             <div className="section-title">
               <LockKeyhole size={18} />
-              <span>Acceso seguro</span>
+              <span>Sesion persistente</span>
             </div>
-            <label>
-              Email
-              <input value={sessionEmail} onChange={(event) => setSessionEmail(event.target.value)} placeholder="usuario@empresa.com" />
-            </label>
-            <label>
-              Password
-              <input type="password" placeholder="Gestionado por Supabase Auth" />
-            </label>
-            <button className="primary-button" type="button">
-              Preparado para login real
+            <div className="secure-state">
+              <span className="status-dot is-online" />
+              <div>
+                <strong>Ruta privada desbloqueada</strong>
+                <p>Si recargas, Supabase recupera la sesion guardada.</p>
+              </div>
+            </div>
+            <button className="ghost-button full-width" onClick={onSignOut} type="button">
+              <LogOut size={16} />
+              Cerrar sesion
             </button>
           </article>
         </section>
@@ -190,12 +524,12 @@ function App() {
           <article className="glass-panel profiles-panel">
             <div className="section-heading">
               <div>
-                <p className="chrome-label">DATA-02</p>
+                <p className="chrome-label">Datos protegidos</p>
                 <h3>Perfiles operativos</h3>
               </div>
-              <button className="ghost-button" type="button">
+              <button className="ghost-button" disabled={role !== "admin"} type="button">
                 <Settings2 size={16} />
-                Editar
+                Admin
               </button>
             </div>
             <div className="profile-list">
@@ -215,7 +549,7 @@ function App() {
           <article className="glass-panel activity-panel">
             <div className="section-heading">
               <div>
-                <p className="chrome-label">DATA-03 / DATA-04</p>
+                <p className="chrome-label">Mapa privado</p>
                 <h3>{sampleActivity.title}</h3>
               </div>
               <span className="small-badge blue">En curso</span>
@@ -237,12 +571,12 @@ function App() {
           <div className="section-heading">
             <div>
               <p className="chrome-label">Items, epicas y aceptacion</p>
-              <h3>Cobertura Sprint 0</h3>
+              <h3>Cobertura Sprint 1</h3>
             </div>
             <span className="small-badge green">Listo para QA</span>
           </div>
           <div className="item-grid">
-            {technicalItems.map((item) => (
+            {authItems.map((item) => (
               <article className="item-card" key={item.code}>
                 <div className="item-card-header">
                   <span>{item.code}</span>
@@ -256,14 +590,45 @@ function App() {
         </section>
 
         <section className="foundation-rail">
-          <RailItem icon={Database} title="Base de datos" body="SQL inicial con relaciones, constraints, indices, RLS y triggers." />
-          <RailItem icon={CalendarDays} title="Horarios" body="Bloques por dia, perfil y actividad, listos para mapa de carga." />
-          <RailItem icon={NotebookPen} title="Notas" body="Notas y pendientes ya modelados para perfil, actividad o ambos." />
-          <RailItem icon={Wrench} title="Herramientas" body="Registro trazable de herramientas y temas trabajados." />
-          <RailItem icon={Clock3} title="Cambios" body="Historial tecnico preparado para auditoria por usuario y fecha." />
+          <RailItem icon={LockKeyhole} title="Login" body="Formulario real conectado a Supabase Auth." />
+          <RailItem icon={UserRoundPlus} title="Registro" body="Alta controlada por variable de entorno." />
+          <RailItem icon={ShieldCheck} title="RLS" body="Sin sesion no hay lectura ni escritura de tablas privadas." />
+          <RailItem icon={UserRound} title="Roles" body="`user` y `admin` disponibles en frontend y base." />
+          <RailItem icon={Clock3} title="Sesion" body="Persistencia, recarga y logout cubiertos." />
         </section>
       </section>
     </main>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <main className="auth-shell single">
+      <section className="auth-panel glass-panel">
+        <div className="brand-block">
+          <div className="brand-mark">
+            <ShieldCheck size={22} />
+          </div>
+          <div>
+            <p className="chrome-label">Sesion</p>
+            <h1>Comprobando acceso</h1>
+          </div>
+        </div>
+        <div className="loader-bar" />
+      </section>
+    </main>
+  );
+}
+
+function SecurityPoint({ icon: Icon, title, body }) {
+  return (
+    <article className="security-point">
+      <Icon size={18} />
+      <div>
+        <h3>{title}</h3>
+        <p>{body}</p>
+      </div>
+    </article>
   );
 }
 
@@ -291,6 +656,24 @@ function RailItem({ icon: Icon, title, body }) {
       </div>
     </article>
   );
+}
+
+function readableAuthError(message) {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes("invalid login credentials")) {
+    return "Email o contrasena incorrectos.";
+  }
+
+  if (lowerMessage.includes("email")) {
+    return "Revisa el email introducido.";
+  }
+
+  if (lowerMessage.includes("password")) {
+    return "Revisa la contrasena.";
+  }
+
+  return "No se ha podido completar la operacion. Prueba de nuevo.";
 }
 
 export default App;

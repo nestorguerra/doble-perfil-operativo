@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "lint": "eslint .",
-    "check": "npm run lint && npm run build"
+    "test": "vitest run",
+    "check": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
@@ -24,6 +25,7 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
-    "rollup": "npm:@rollup/wasm-node@^4.60.3"
+    "rollup": "npm:@rollup/wasm-node@^4.60.3",
+    "vitest": "^3.0.8"
   }
 }

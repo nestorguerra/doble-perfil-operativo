@@ -10,11 +10,11 @@ create type public.task_priority as enum ('low', 'medium', 'high', 'urgent');
 create table public.user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
-  role text not null default 'member',
+  role text not null default 'user',
   preferences jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint user_profiles_role_check check (role in ('owner', 'admin', 'member', 'viewer'))
+  constraint user_profiles_role_check check (role in ('admin', 'user'))
 );
 
 create table public.profiles (

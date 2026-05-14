@@ -18,3 +18,6 @@ export const supabase = hasSupabaseConfig
       },
     })
   : null;
+
+export const isRegistrationEnabled =
+  import.meta.env.VITE_AUTH_REGISTRATION_ENABLED === "true";
