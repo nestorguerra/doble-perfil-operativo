@@ -353,7 +353,7 @@ function App() {
       "tools",
       "change_history",
     ];
-    const channel = supabase.channel("sprint-6-dashboard-realtime");
+    const channel = supabase.channel("dashboard-realtime");
 
     tables.forEach((table) => {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, () =>
@@ -1185,7 +1185,7 @@ function AuthScreen({ onDemoLogin, syncState }) {
             <MapIcon size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 8</p>
+            <p className="chrome-label">Producto operativo</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -1456,7 +1456,7 @@ function PrivateDashboard({
             <MapIcon size={22} />
           </div>
           <div>
-            <p className="chrome-label">Sprint 8</p>
+            <p className="chrome-label">Doble Perfil</p>
             <h1>Doble Perfil</h1>
           </div>
         </div>
@@ -3360,7 +3360,7 @@ function WorkContextPanel({
     <section className="glass-panel work-context-panel">
       <div className="section-heading">
         <div>
-          <p className="chrome-label">Sprint 8</p>
+          <p className="chrome-label">Contexto operativo</p>
           <h3>{title}</h3>
         </div>
         <span className="small-badge green">

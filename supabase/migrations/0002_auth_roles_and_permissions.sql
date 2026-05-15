@@ -1,4 +1,4 @@
--- Sprint 1 - Login y Base Segura
+-- Autenticacion y seguridad - Login y Base Segura
 -- Roles simples, helpers de permisos y ajuste de RLS.
 
 alter table public.user_profiles

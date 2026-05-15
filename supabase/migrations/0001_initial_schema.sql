@@ -1,4 +1,4 @@
--- Sprint 0 - Fundacion Tecnica
+-- Fundacion tecnica - Fundacion Tecnica
 -- Doble Perfil Operativo
 
 create extension if not exists "pgcrypto";

@@ -37,9 +37,9 @@ Supabase:
 - Proyecto Supabase de staging si se quiere separar datos reales y datos de prueba.
 - Variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` propias para staging.
 
-## Gate Sprint 0
+## Gate Fundacion tecnica
 
-Para cerrar este sprint:
+Para cerrar este fase:
 
 - La app debe abrir en local.
 - `npm run build` debe completar sin errores.

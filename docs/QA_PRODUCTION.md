@@ -1,4 +1,4 @@
-# Sprint 8 - QA, Produccion y GitHub Pages
+# Produccion y QA - QA, Produccion y GitHub Pages
 
 ## Objetivo
 

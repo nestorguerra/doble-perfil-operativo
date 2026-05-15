@@ -1,4 +1,4 @@
-# Sprint 2 - Dashboard y Perfiles Interconectados
+# Dashboard y perfiles - Dashboard y Perfiles Interconectados
 
 ## Objetivo
 

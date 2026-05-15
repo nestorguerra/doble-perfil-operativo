@@ -6,7 +6,7 @@ El producto esta implementado como aplicacion web estatica en GitHub Pages con b
 
 Estado actual:
 
-- Codigo de Sprints 0 a 8 implementado.
+- Codigo de las fases funcionales implementado.
 - Build estatico validado.
 - GitHub Pages desplegado.
 - URL publica respondiendo.
@@ -20,123 +20,123 @@ https://nestorguerra.github.io/doble-perfil-operativo/
 
 ## 5. Trazabilidad Completa de Items
 
-| Item | Sprint | Estado objetivo | Estado actual |
+| Item | Fase | Estado objetivo | Estado actual |
 |---|---:|---|---|
-| AUTH-01 | Sprint 1 | MVP | Implementado |
-| AUTH-02 | Sprint 1 | MVP | Implementado |
-| AUTH-03 | Sprint 8 | Produccion | Implementado |
-| AUTH-04 | Sprint 1 | MVP | Implementado |
-| AUTH-05 | Sprint 1 | MVP | Implementado |
-| AUTH-06 | Sprint 1 | MVP | Implementado |
-| AUTH-07 | Sprint 1 | MVP | Implementado |
-| DASH-01 | Sprint 2 | MVP | Implementado |
-| DASH-02 | Sprint 2 | MVP | Implementado |
-| DASH-03 | Sprint 2 | MVP | Implementado |
-| DASH-04 | Sprint 2 | MVP | Implementado |
-| DASH-05 | Sprint 2 | MVP | Implementado |
-| DASH-06 | Sprint 7 | Comercial | Implementado |
-| DASH-07 | Sprint 2 | MVP | Implementado |
-| PROF-01 | Sprint 2 | MVP | Implementado |
-| PROF-02 | Sprint 2 | MVP | Implementado |
-| PROF-03 | Sprint 2 | MVP | Implementado |
-| PROF-04 | Sprint 2 | MVP | Implementado |
-| PROF-05 | Sprint 2 | MVP | Implementado |
-| PROF-06 | Sprint 2 | MVP | Implementado |
+| AUTH-01 | Autenticacion y seguridad | MVP | Implementado |
+| AUTH-02 | Autenticacion y seguridad | MVP | Implementado |
+| AUTH-03 | Produccion y QA | Produccion | Implementado |
+| AUTH-04 | Autenticacion y seguridad | MVP | Implementado |
+| AUTH-05 | Autenticacion y seguridad | MVP | Implementado |
+| AUTH-06 | Autenticacion y seguridad | MVP | Implementado |
+| AUTH-07 | Autenticacion y seguridad | MVP | Implementado |
+| DASH-01 | Dashboard y perfiles | MVP | Implementado |
+| DASH-02 | Dashboard y perfiles | MVP | Implementado |
+| DASH-03 | Dashboard y perfiles | MVP | Implementado |
+| DASH-04 | Dashboard y perfiles | MVP | Implementado |
+| DASH-05 | Dashboard y perfiles | MVP | Implementado |
+| DASH-06 | UX comercial y administracion | Comercial | Implementado |
+| DASH-07 | Dashboard y perfiles | MVP | Implementado |
+| PROF-01 | Dashboard y perfiles | MVP | Implementado |
+| PROF-02 | Dashboard y perfiles | MVP | Implementado |
+| PROF-03 | Dashboard y perfiles | MVP | Implementado |
+| PROF-04 | Dashboard y perfiles | MVP | Implementado |
+| PROF-05 | Dashboard y perfiles | MVP | Implementado |
+| PROF-06 | Dashboard y perfiles | MVP | Implementado |
 | PROF-07 | Cubierto por HIST-05 | Comercial | Implementado |
-| ACT-01 | Sprint 3 | MVP | Implementado |
-| ACT-02 | Sprint 3 | MVP | Implementado |
-| ACT-03 | Sprint 3 | MVP | Implementado |
-| ACT-04 | Sprint 3 | MVP | Implementado |
-| ACT-05 | Sprint 3 | MVP | Implementado |
-| ACT-06 | Sprint 8 | Produccion | Implementado |
-| ACT-07 | Sprint 7 | Comercial | Implementado |
-| ACT-08 | Sprint 3 | MVP | Implementado |
-| TIME-01 | Sprint 4 | MVP | Implementado |
-| TIME-02 | Sprint 4 | MVP | Implementado |
-| TIME-03 | Sprint 4 | MVP | Implementado |
-| TIME-04 | Sprint 4 | MVP | Implementado |
-| TIME-05 | Sprint 4 | MVP | Implementado |
-| TIME-06 | Sprint 4 | MVP | Implementado |
-| TIME-07 | Sprint 4 | MVP | Implementado |
-| TIME-08 | Sprint 7 | Comercial | Implementado |
-| MAP-01 | Sprint 4 | MVP | Implementado |
-| MAP-02 | Sprint 4 | MVP | Implementado |
-| MAP-03 | Sprint 4 | MVP | Implementado |
-| MAP-04 | Sprint 4 | MVP | Implementado |
-| MAP-05 | Sprint 4 | MVP | Implementado |
-| MAP-06 | Sprint 7 | Comercial | Implementado |
-| MAP-07 | Sprint 8 | Produccion | Implementado |
-| TOPIC-01 | Sprint 5 | MVP | Implementado |
-| TOPIC-02 | Sprint 5 | MVP | Implementado |
-| TOPIC-03 | Sprint 5 | MVP | Implementado |
-| TOPIC-04 | Sprint 5 | MVP | Implementado |
-| TOPIC-05 | Sprint 5 | MVP | Implementado |
-| TOPIC-06 | Sprint 7 | Comercial | Implementado |
-| TASK-01 | Sprint 5 | MVP | Implementado |
-| TASK-02 | Sprint 5 | MVP | Implementado |
-| TASK-03 | Sprint 5 | MVP | Implementado |
-| TASK-04 | Sprint 5 | MVP | Implementado |
-| TASK-05 | Sprint 5 | MVP | Implementado |
-| TASK-06 | Sprint 5 | MVP | Implementado |
-| TASK-07 | Sprint 7 | Comercial | Implementado |
-| TOOL-01 | Sprint 5 | MVP | Implementado |
-| TOOL-02 | Sprint 5 | MVP | Implementado |
-| TOOL-03 | Sprint 5 | MVP | Implementado |
-| TOOL-04 | Sprint 5 | MVP | Implementado |
-| TOOL-05 | Sprint 5 | MVP | Implementado |
-| TOOL-06 | Sprint 7 | Comercial | Implementado |
-| NOTE-01 | Sprint 5 | MVP | Implementado |
-| NOTE-02 | Sprint 5 | MVP | Implementado |
-| NOTE-03 | Sprint 5 | MVP | Implementado |
-| NOTE-04 | Sprint 5 | MVP | Implementado |
-| NOTE-05 | Sprint 5 | MVP | Implementado |
-| NOTE-06 | Sprint 7 | Comercial | Implementado |
-| NOTE-07 | Sprint 8 | Produccion | Implementado |
-| SYNC-01 | Sprint 6 | MVP | Implementado |
-| SYNC-02 | Sprint 6 | MVP | Implementado |
-| SYNC-03 | Sprint 6 | MVP | Implementado |
-| SYNC-04 | Sprint 6 | MVP | Implementado |
-| SYNC-05 | Sprint 6 | MVP | Implementado |
-| SYNC-06 | Sprint 8 | Produccion | Implementado |
-| HIST-01 | Sprint 6 | MVP | Implementado |
-| HIST-02 | Sprint 6 | MVP | Implementado |
-| HIST-03 | Sprint 6 | MVP | Implementado |
-| HIST-04 | Sprint 6 | MVP | Implementado |
-| HIST-05 | Sprint 7 | Comercial | Implementado |
-| HIST-06 | Sprint 8 | Produccion | Implementado |
-| UI-01 | Sprint 0 | Fundacion | Implementado |
-| UI-02 | Sprint 7 | Comercial | Implementado |
-| UI-03 | Sprint 2 | MVP | Implementado |
-| UI-04 | Sprint 2 | MVP | Implementado |
-| UI-05 | Sprint 7 | Comercial | Implementado |
-| UI-06 | Sprint 7 | Comercial | Implementado |
-| UI-07 | Sprint 8 | Produccion | Implementado |
-| UI-08 | Sprint 7 | Comercial | Implementado |
-| DATA-01 | Sprint 0 | Fundacion | Implementado |
-| DATA-02 | Sprint 0 | Fundacion | Implementado |
-| DATA-03 | Sprint 0 | Fundacion | Implementado |
-| DATA-04 | Sprint 0 | Fundacion | Implementado |
-| DATA-05 | Sprint 0 | Fundacion | Implementado |
-| DATA-06 | Sprint 0 | Fundacion | Implementado |
-| DATA-07 | Sprint 0 | Fundacion | Implementado |
-| DATA-08 | Sprint 0 | Fundacion | Implementado |
-| DATA-09 | Sprint 0 | Fundacion | Implementado |
-| DATA-10 | Sprint 0 | Fundacion | Implementado |
-| DATA-11 | Sprint 0 | Fundacion | Implementado |
-| ADMIN-01 | Sprint 7 | Comercial | Implementado |
-| ADMIN-02 | Sprint 8 | Produccion | Implementado |
-| ADMIN-03 | Sprint 1 | MVP | Implementado |
-| ADMIN-04 | Sprint 2 | MVP | Implementado |
-| ADMIN-05 | Sprint 8 | Produccion | Implementado |
-| QA-01 | Sprint 3 | MVP | Implementado |
-| QA-02 | Sprint 1 | MVP | Implementado |
-| QA-03 | Sprint 3 | MVP | Implementado |
-| QA-04 | Sprint 6 | MVP | Implementado |
-| QA-05 | Sprint 8 | Produccion | Implementado |
-| QA-06 | Sprint 1 | MVP | Implementado |
-| QA-07 | Sprint 0 | Fundacion | Implementado |
-| QA-08 | Sprint 8 | Produccion | Implementado |
-| QA-09 | Sprint 8 | Produccion | Parcial: smoke publico de carga OK; smoke autenticado pendiente de Supabase prod |
+| ACT-01 | Actividades | MVP | Implementado |
+| ACT-02 | Actividades | MVP | Implementado |
+| ACT-03 | Actividades | MVP | Implementado |
+| ACT-04 | Actividades | MVP | Implementado |
+| ACT-05 | Actividades | MVP | Implementado |
+| ACT-06 | Produccion y QA | Produccion | Implementado |
+| ACT-07 | UX comercial y administracion | Comercial | Implementado |
+| ACT-08 | Actividades | MVP | Implementado |
+| TIME-01 | Horarios y mapa | MVP | Implementado |
+| TIME-02 | Horarios y mapa | MVP | Implementado |
+| TIME-03 | Horarios y mapa | MVP | Implementado |
+| TIME-04 | Horarios y mapa | MVP | Implementado |
+| TIME-05 | Horarios y mapa | MVP | Implementado |
+| TIME-06 | Horarios y mapa | MVP | Implementado |
+| TIME-07 | Horarios y mapa | MVP | Implementado |
+| TIME-08 | UX comercial y administracion | Comercial | Implementado |
+| MAP-01 | Horarios y mapa | MVP | Implementado |
+| MAP-02 | Horarios y mapa | MVP | Implementado |
+| MAP-03 | Horarios y mapa | MVP | Implementado |
+| MAP-04 | Horarios y mapa | MVP | Implementado |
+| MAP-05 | Horarios y mapa | MVP | Implementado |
+| MAP-06 | UX comercial y administracion | Comercial | Implementado |
+| MAP-07 | Produccion y QA | Produccion | Implementado |
+| TOPIC-01 | Contexto de trabajo | MVP | Implementado |
+| TOPIC-02 | Contexto de trabajo | MVP | Implementado |
+| TOPIC-03 | Contexto de trabajo | MVP | Implementado |
+| TOPIC-04 | Contexto de trabajo | MVP | Implementado |
+| TOPIC-05 | Contexto de trabajo | MVP | Implementado |
+| TOPIC-06 | UX comercial y administracion | Comercial | Implementado |
+| TASK-01 | Contexto de trabajo | MVP | Implementado |
+| TASK-02 | Contexto de trabajo | MVP | Implementado |
+| TASK-03 | Contexto de trabajo | MVP | Implementado |
+| TASK-04 | Contexto de trabajo | MVP | Implementado |
+| TASK-05 | Contexto de trabajo | MVP | Implementado |
+| TASK-06 | Contexto de trabajo | MVP | Implementado |
+| TASK-07 | UX comercial y administracion | Comercial | Implementado |
+| TOOL-01 | Contexto de trabajo | MVP | Implementado |
+| TOOL-02 | Contexto de trabajo | MVP | Implementado |
+| TOOL-03 | Contexto de trabajo | MVP | Implementado |
+| TOOL-04 | Contexto de trabajo | MVP | Implementado |
+| TOOL-05 | Contexto de trabajo | MVP | Implementado |
+| TOOL-06 | UX comercial y administracion | Comercial | Implementado |
+| NOTE-01 | Contexto de trabajo | MVP | Implementado |
+| NOTE-02 | Contexto de trabajo | MVP | Implementado |
+| NOTE-03 | Contexto de trabajo | MVP | Implementado |
+| NOTE-04 | Contexto de trabajo | MVP | Implementado |
+| NOTE-05 | Contexto de trabajo | MVP | Implementado |
+| NOTE-06 | UX comercial y administracion | Comercial | Implementado |
+| NOTE-07 | Produccion y QA | Produccion | Implementado |
+| SYNC-01 | Autosave, realtime e historico | MVP | Implementado |
+| SYNC-02 | Autosave, realtime e historico | MVP | Implementado |
+| SYNC-03 | Autosave, realtime e historico | MVP | Implementado |
+| SYNC-04 | Autosave, realtime e historico | MVP | Implementado |
+| SYNC-05 | Autosave, realtime e historico | MVP | Implementado |
+| SYNC-06 | Produccion y QA | Produccion | Implementado |
+| HIST-01 | Autosave, realtime e historico | MVP | Implementado |
+| HIST-02 | Autosave, realtime e historico | MVP | Implementado |
+| HIST-03 | Autosave, realtime e historico | MVP | Implementado |
+| HIST-04 | Autosave, realtime e historico | MVP | Implementado |
+| HIST-05 | UX comercial y administracion | Comercial | Implementado |
+| HIST-06 | Produccion y QA | Produccion | Implementado |
+| UI-01 | Fundacion tecnica | Fundacion | Implementado |
+| UI-02 | UX comercial y administracion | Comercial | Implementado |
+| UI-03 | Dashboard y perfiles | MVP | Implementado |
+| UI-04 | Dashboard y perfiles | MVP | Implementado |
+| UI-05 | UX comercial y administracion | Comercial | Implementado |
+| UI-06 | UX comercial y administracion | Comercial | Implementado |
+| UI-07 | Produccion y QA | Produccion | Implementado |
+| UI-08 | UX comercial y administracion | Comercial | Implementado |
+| DATA-01 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-02 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-03 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-04 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-05 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-06 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-07 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-08 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-09 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-10 | Fundacion tecnica | Fundacion | Implementado |
+| DATA-11 | Fundacion tecnica | Fundacion | Implementado |
+| ADMIN-01 | UX comercial y administracion | Comercial | Implementado |
+| ADMIN-02 | Produccion y QA | Produccion | Implementado |
+| ADMIN-03 | Autenticacion y seguridad | MVP | Implementado |
+| ADMIN-04 | Dashboard y perfiles | MVP | Implementado |
+| ADMIN-05 | Produccion y QA | Produccion | Implementado |
+| QA-01 | Actividades | MVP | Implementado |
+| QA-02 | Autenticacion y seguridad | MVP | Implementado |
+| QA-03 | Actividades | MVP | Implementado |
+| QA-04 | Autosave, realtime e historico | MVP | Implementado |
+| QA-05 | Produccion y QA | Produccion | Implementado |
+| QA-06 | Autenticacion y seguridad | MVP | Implementado |
+| QA-07 | Fundacion tecnica | Fundacion | Implementado |
+| QA-08 | Produccion y QA | Produccion | Implementado |
+| QA-09 | Produccion y QA | Produccion | Parcial: smoke publico de carga OK; smoke autenticado pendiente de Supabase prod |
 
 ## 6. Plan de Produccion en GitHub Pages
 
@@ -217,8 +217,8 @@ https://nestorguerra.github.io/doble-perfil-operativo/
 |---|---|---|
 | GitHub Pages no ejecuta backend | Alto | Backend externo en Supabase para auth, base de datos y realtime |
 | Seguridad incompleta | Alto | RLS, policies, Supabase Auth y rutas privadas |
-| Sobrecarga de MVP | Medio | Construccion por sprints con nucleo funcional antes de pulido |
-| Conflictos de edicion | Medio | Control minimo por `updated_at` en Sprint 8 |
+| Sobrecarga de MVP | Medio | Construccion por fases con nucleo funcional antes de pulido |
+| Conflictos de edicion | Medio | Control minimo por `updated_at` en Produccion y QA |
 | UI bonita pero poco util | Medio | Dashboard operativo, estados visibles, flujos cortos y responsive |
 
 ## 9. Orden Recomendado de Construccion

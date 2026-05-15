@@ -1,4 +1,4 @@
-# Sprint 7 - UX Comercial, Responsive y Administracion
+# UX comercial y administracion - UX Comercial, Responsive y Administracion
 
 ## Objetivo
 
@@ -33,7 +33,7 @@ Incluye:
 
 ## UX
 
-La pantalla de entrada y la shell privada se actualizan a Sprint 7. Se mantienen paneles tipo glass, blur, sombras sobrias y contraste suficiente. Los estados de carga/sincronizacion aparecen como banner discreto cuando la app no esta en estado estable.
+La pantalla de entrada y la shell privada se actualizan a UX comercial y administracion. Se mantienen paneles tipo glass, blur, sombras sobrias y contraste suficiente. Los estados de carga/sincronizacion aparecen como banner discreto cuando la app no esta en estado estable.
 
 ## QA recomendado
 

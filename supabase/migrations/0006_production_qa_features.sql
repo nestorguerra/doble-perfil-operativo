@@ -1,4 +1,4 @@
--- Sprint 8 - QA, Produccion y GitHub Pages
+-- Produccion y QA - QA, Produccion y GitHub Pages
 -- Soporte para notas destacadas y consultas de produccion.
 
 alter table public.notes

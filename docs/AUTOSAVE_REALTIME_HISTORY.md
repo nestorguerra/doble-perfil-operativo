@@ -1,4 +1,4 @@
-# Sprint 6 - Autosave, Realtime e Historico
+# Autosave, realtime e historico - Autosave, Realtime e Historico
 
 ## Objetivo
 
@@ -32,7 +32,7 @@ La creacion de registros sigue usando boton explicito para evitar crear datos va
 
 ## Historico
 
-La tabla `change_history` ya existia desde Sprint 0. En Sprint 6 se mejora el trigger para generar resumenes legibles:
+La tabla `change_history` ya existia desde Fundacion tecnica. En Autosave, realtime e historico se mejora el trigger para generar resumenes legibles:
 
 - `Actividad creada: ...`
 - `Nota actualizada: ...`

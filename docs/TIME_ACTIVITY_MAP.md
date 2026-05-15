@@ -1,4 +1,4 @@
-# Sprint 4 - Horarios y Mapa Visual de Actividad
+# Horarios y mapa - Horarios y Mapa Visual de Actividad
 
 ## Objetivo
 
@@ -52,7 +52,7 @@ Incluye:
 - Bloque sin actividad.
 - Rango horario invalido.
 - Normalizacion del payload horario.
-- Tests de auth y actividades de sprints anteriores.
+- Tests de auth y actividades de fases anteriores.
 
 ## QA manual con Supabase conectado
 

@@ -4,7 +4,7 @@ Aplicacion web para gestionar dos perfiles operativos interconectados con activi
 
 ## Estado actual
 
-Sprint 8 - QA, Produccion y GitHub Pages:
+Producto operativo - QA, produccion y GitHub Pages:
 
 - App frontend inicial con React + Vite.
 - Sistema visual base con paneles tipo glass, tokens CSS, botones, inputs, badges y estados.
@@ -116,13 +116,13 @@ supabase/
 docs/
   SUPABASE_SETUP.md
   STAGING_DEPLOYMENT.md
-  SPRINT_1_QA.md
-  SPRINT_2_DASHBOARD_PROFILES.md
-  SPRINT_3_ACTIVITIES.md
-  SPRINT_4_TIME_ACTIVITY_MAP.md
-  SPRINT_5_WORK_CONTEXT.md
-  SPRINT_6_AUTOSAVE_REALTIME_HISTORY.md
-  SPRINT_7_COMMERCIAL_UX_ADMIN.md
-  SPRINT_8_QA_PRODUCTION.md
+  LOGIN_PERMISSIONS_QA.md
+  DASHBOARD_PROFILES.md
+  ACTIVITIES.md
+  TIME_ACTIVITY_MAP.md
+  WORK_CONTEXT.md
+  AUTOSAVE_REALTIME_HISTORY.md
+  COMMERCIAL_UX_ADMIN.md
+  QA_PRODUCTION.md
   PRODUCT_TRACEABILITY_AND_PRODUCTION_READINESS.md
 ```

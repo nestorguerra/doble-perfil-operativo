@@ -1,4 +1,4 @@
--- Sprint 2 - Dashboard y Perfiles Interconectados
+-- Dashboard y perfiles - Dashboard y Perfiles Interconectados
 -- Campo visible de rol operativo y soporte de configuracion de perfiles.
 
 alter table public.profiles

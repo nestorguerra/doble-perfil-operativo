@@ -42,14 +42,14 @@ Para sincronizacion en tiempo real:
 
 1. Ir a Database > Replication.
 2. Activar Realtime para las tablas necesarias.
-3. Para Sprint 0 basta con `profiles`.
-4. En sprints posteriores activar `activities`, `schedule_entries`, `notes`, `pending_tasks`, `tools`, `topics` y `change_history`.
+3. Para Fundacion tecnica basta con `profiles`.
+4. En fases posteriores activar `activities`, `schedule_entries`, `notes`, `pending_tasks`, `tools`, `topics` y `change_history`.
 
 ## Seguridad
 
 La migracion activa RLS en las tablas publicas.
 
-Politica Sprint 1:
+Politica Autenticacion y seguridad:
 
 - Usuarios anonimos no tienen policies sobre tablas privadas.
 - Usuarios autenticados pueden leer y escribir datos operativos compartidos.
@@ -57,7 +57,7 @@ Politica Sprint 1:
 - Usuarios `admin` pueden consultar y actualizar perfiles publicos de usuario.
 - Un trigger bloquea cambios de rol si el usuario actual no es `admin`.
 
-En sprints posteriores se puede endurecer por equipo, rol o pertenencia a workspace.
+En fases posteriores se puede endurecer por equipo, rol o pertenencia a workspace.
 
 ## Crear primer administrador
 

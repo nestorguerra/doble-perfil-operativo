@@ -1,4 +1,4 @@
-# Sprint 5 - Notas, Temas, Pendientes y Herramientas
+# Contexto de trabajo - Notas, Temas, Pendientes y Herramientas
 
 ## Objetivo
 
@@ -26,7 +26,7 @@ Completar el trabajo diario de perfiles y actividades con entidades editables, p
 
 ## Tablas usadas
 
-No se ha creado una migracion nueva porque las tablas estaban incluidas desde Sprint 0:
+No se ha creado una migracion nueva porque las tablas estaban incluidas desde Fundacion tecnica:
 
 - `notes`
 - `topics`

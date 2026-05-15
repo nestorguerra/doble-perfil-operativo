@@ -1,4 +1,4 @@
--- Sprint 7 - UX Comercial, Responsive y Administracion
+-- UX comercial y administracion - UX Comercial, Responsive y Administracion
 -- Etiquetas simples para temas y soporte de preferencias de usuario.
 
 alter table public.topics

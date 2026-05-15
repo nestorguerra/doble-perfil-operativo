@@ -1,4 +1,4 @@
-# Sprint 3 - Actividades
+# Actividades - Actividades
 
 ## Objetivo
 
@@ -42,7 +42,7 @@ Incluye:
 - Validacion de actividad sin titulo.
 - Validacion de actividad sin perfil.
 - Normalizacion de actividad.
-- Validaciones de auth de sprints anteriores.
+- Validaciones de auth de fases anteriores.
 
 ## QA manual con Supabase conectado
 

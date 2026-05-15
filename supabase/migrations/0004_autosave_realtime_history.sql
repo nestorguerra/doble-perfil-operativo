@@ -1,4 +1,4 @@
--- Sprint 6 - Autosave, Realtime e Historico
+-- Autosave, realtime e historico - Autosave, Realtime e Historico
 -- Mejora el resumen de auditoria y asegura tablas clave en Supabase Realtime.
 
 create or replace function public.log_change_history()
